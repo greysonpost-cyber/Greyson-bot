@@ -16,8 +16,14 @@ for (const folder of fs.readdirSync(commandsRoot)) {
     const folderPath = path.join(commandsRoot, folder);
     if (!fs.statSync(folderPath).isDirectory()) continue;
     for (const file of fs.readdirSync(folderPath).filter(f => f.endsWith('.js'))) {
-        const command = require(path.join(folderPath, file));
-        if (command?.data) commands.push(command.data.toJSON());
+        const commandPath = path.join(folderPath, file);
+        try {
+            const command = require(commandPath);
+            if (command?.data) commands.push(command.data.toJSON());
+        } catch (error) {
+            console.error(`[commands] Invalid slash command in ${folder}/${file}:`, error);
+            process.exit(1);
+        }
     }
 }
 

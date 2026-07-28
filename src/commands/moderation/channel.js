@@ -17,7 +17,7 @@ module.exports = {
     .setDescription('Lock, unlock, or set slowmode')
     .addSubcommand(s => s.setName('lock').setDescription('Lock a channel').addChannelOption(o => o.setName('channel').setDescription('Channel').addChannelTypes(ChannelType.GuildText)))
     .addSubcommand(s => s.setName('unlock').setDescription('Unlock a channel').addChannelOption(o => o.setName('channel').setDescription('Channel').addChannelTypes(ChannelType.GuildText)))
-    .addSubcommand(s => s.setName('slowmode').setDescription('Set slowmode seconds').addIntegerOption(o => o.setName('seconds').setRequired(true).setMinValue(0).setMaxValue(21600)).addChannelOption(o => o.setName('channel').setDescription('Channel').addChannelTypes(ChannelType.GuildText))),
+    .addSubcommand(s => s.setName('slowmode').setDescription('Set slowmode seconds').addIntegerOption(o => o.setName('seconds').setDescription('Slowmode delay in seconds').setRequired(true).setMinValue(0).setMaxValue(21600)).addChannelOption(o => o.setName('channel').setDescription('Channel').addChannelTypes(ChannelType.GuildText))),
   async execute(interaction) {
     const sub = interaction.options.getSubcommand();
     if (!allowed(interaction, sub === 'slowmode' ? 'lock' : sub)) return interaction.reply({ embeds: [errorEmbed('No Permission', 'Your role is not configured for this action in this channel.')], ephemeral: true });
