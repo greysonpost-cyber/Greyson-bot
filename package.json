@@ -5,8 +5,9 @@
   "main": "src/index.js",
   "type": "commonjs",
   "scripts": {
-    "start": "node src/index.js",
-    "deploy": "node src/deploy-commands.js"
+    "start": "node src/deploy-commands.js && node src/index.js",
+    "deploy": "node src/deploy-commands.js",
+    "bot": "node src/index.js"
   },
   "dependencies": {
     "better-sqlite3": "^11.3.0",
