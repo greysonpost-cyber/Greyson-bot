@@ -128,3 +128,64 @@ CREATE TABLE IF NOT EXISTS giveaway_entries (
     entries INTEGER NOT NULL DEFAULT 1,
     PRIMARY KEY (giveaway_id, user_id)
 );
+
+-- BIG UPDATE: giveaway presets, claim tickets, automod, embeds, minigames
+CREATE TABLE IF NOT EXISTS giveaway_presets (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  guild_id TEXT NOT NULL,
+  name TEXT NOT NULL,
+  settings_json TEXT NOT NULL,
+  created_by TEXT NOT NULL,
+  created_at INTEGER NOT NULL,
+  UNIQUE(guild_id, name)
+);
+
+CREATE TABLE IF NOT EXISTS giveaway_claims (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  giveaway_id INTEGER NOT NULL,
+  guild_id TEXT NOT NULL,
+  winner_id TEXT NOT NULL,
+  ticket_channel_id TEXT,
+  status TEXT NOT NULL DEFAULT 'waiting',
+  claim_deadline INTEGER,
+  auto_claimed INTEGER NOT NULL DEFAULT 0,
+  reroll_number INTEGER NOT NULL DEFAULT 0,
+  created_at INTEGER NOT NULL,
+  claimed_at INTEGER,
+  fulfilled_at INTEGER,
+  handled_by TEXT
+);
+
+CREATE TABLE IF NOT EXISTS saved_embeds (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  guild_id TEXT NOT NULL,
+  name TEXT NOT NULL,
+  embed_json TEXT NOT NULL,
+  created_by TEXT NOT NULL,
+  created_at INTEGER NOT NULL,
+  UNIQUE(guild_id, name)
+);
+
+CREATE TABLE IF NOT EXISTS automod_rules (
+  guild_id TEXT NOT NULL,
+  rule_type TEXT NOT NULL,
+  enabled INTEGER NOT NULL DEFAULT 0,
+  action TEXT NOT NULL DEFAULT 'delete',
+  threshold INTEGER,
+  duration_ms INTEGER,
+  ignored_roles_json TEXT,
+  ignored_channels_json TEXT,
+  custom_json TEXT,
+  PRIMARY KEY(guild_id, rule_type)
+);
+
+CREATE TABLE IF NOT EXISTS wheel_sessions (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  guild_id TEXT NOT NULL,
+  channel_id TEXT NOT NULL,
+  host_id TEXT NOT NULL,
+  message_id TEXT,
+  entries_json TEXT NOT NULL DEFAULT '[]',
+  status TEXT NOT NULL DEFAULT 'open',
+  created_at INTEGER NOT NULL
+);

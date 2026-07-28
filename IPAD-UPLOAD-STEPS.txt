@@ -1,0 +1,10 @@
+Use Working Copy on iPad:
+1. Clone your Greyson-bot GitHub repository.
+2. In the iPad Files app, extract this ZIP.
+3. Copy ALL items inside this folder into the Working Copy repository folder.
+4. Replace existing files when asked.
+5. In Working Copy, commit all changes with message: Fix bot structure.
+6. Push the commit to origin/main.
+7. Railway will redeploy automatically.
+8. Railway Variables must contain DISCORD_TOKEN, CLIENT_ID, and GUILD_ID.
+9. Railway Start Command should be npm start. Leave Pre-deploy Command blank.

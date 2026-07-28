@@ -1,0 +1,35 @@
+GREYSON BOT — BIG UPDATE
+
+UPLOAD ONCE:
+1. Open your existing Greyson-bot GitHub repository.
+2. Click Add file > Upload files.
+3. Upload EVERYTHING inside this folder (not the outer folder itself).
+4. Confirm replacing files when asked.
+5. Commit message: Big bot update
+6. Wait for Railway to redeploy.
+
+NEW SYSTEMS:
+- Native timeout /mute and /unmute
+- /channel lock, unlock, slowmode with configurable roles/channels
+- /purge
+- /automod set and /automod view
+- /embed send, preset, delete
+- /minigame flag, country, wheel, spin
+- Advanced giveaways: presets, bonus entries, manual entries, claim tickets,
+  role-based claim timers, automatic rerolls, auto-claim roles, fulfillment controls
+
+IMPORTANT SETUP COMMANDS:
+/config set-category category:<your ticket category>
+/config set-value key:giveaway_claim_category value:<CATEGORY_ID>
+/config set-giveaway-role type:Giveaway Staff role:<role>
+/config set-giveaway-role type:Host Role role:<role>
+/config set-giveaway-role type:Lock Role role:<role>
+/config set-giveaway-role type:Unlock Role role:<role>
+
+GIVEAWAY PRESET EXAMPLE:
+/giveaway preset-save name:standard default_claim_minutes:10 bonus_role:@Booster bonus_entries:2 claim_bonus_role:@VIP claim_bonus_minutes:30 auto_claim_role:@AutoClaim ticket_category:<category>
+
+Then start one with:
+/giveaway start prize:Dragonfly duration:1h preset:standard
+
+Railway will register slash commands automatically during startup.

@@ -3,6 +3,7 @@ const { canRunCommand } = require('../utils/permissions');
 const ticketHandler = require('../handlers/ticketHandler');
 const reportHandler = require('../handlers/reportHandler');
 const giveawayHandler = require('../handlers/giveawayHandler');
+const wheelHandler = require('../handlers/wheelHandler');
 
 module.exports = {
     name: 'interactionCreate',
@@ -37,6 +38,7 @@ module.exports = {
             if (customId.startsWith('ticket_')) return ticketHandler.handleInteraction(interaction, client);
             if (customId.startsWith('report_')) return reportHandler.handleInteraction(interaction, client);
             if (customId.startsWith('giveaway_')) return giveawayHandler.handleInteraction(interaction, client);
+            if (customId.startsWith('wheel_')) return wheelHandler.handleInteraction(interaction, client);
         } catch (err) {
             console.error('[interactionCreate] Error:', err);
             const payload = { embeds: [errorEmbed('Something went wrong', 'That action could not be completed. Please try again or contact staff.')], ephemeral: true };
