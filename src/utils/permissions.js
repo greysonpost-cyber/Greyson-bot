@@ -45,6 +45,9 @@ function removeCommandPermission(guildId, commandName, roleId) {
 function getCommandPermissions(guildId, commandName) {
     return listCmdPerms.all(guildId, commandName).map(r => r.role_id);
 }
+function hasCommandPermissions(guildId, commandName) {
+    return getCommandPermissions(guildId, commandName).length > 0;
+}
 
 /** Which role IDs can this member grant via /giverole, given their roles? */
 function getGrantableRolesForMember(member) {
@@ -70,6 +73,7 @@ module.exports = {
     addCommandPermission,
     removeCommandPermission,
     getCommandPermissions,
+    hasCommandPermissions,
     getGrantableRolesForMember,
     addGrantableRole,
     removeGrantableRole,

@@ -1,10 +1,34 @@
 const { SlashCommandBuilder, PermissionFlagsBits } = require('discord.js');
 const { successEmbed, errorEmbed } = require('../../utils/embeds');
+const { sendLog } = require('../../utils/logger');
+const { getConfig } = require('../../utils/config');
 const { logModAction } = require('../../handlers/modActionHelper');
-function parseDuration(s){const m=/^(\d+)\s*(m|h|d|w)$/i.exec(s||'');if(!m)return null;return Number(m[1])*({m:60000,h:3600000,d:86400000,w:604800000}[m[2].toLowerCase()]);}
-module.exports={data:new SlashCommandBuilder().setName('mute').setDescription('Timeout a member without a mute role').setDefaultMemberPermissions(PermissionFlagsBits.ModerateMembers)
-.addUserOption(o=>o.setName('user').setDescription('Member').setRequired(true)).addStringOption(o=>o.setName('duration').setDescription('10m, 2h, 3d').setRequired(true)).addStringOption(o=>o.setName('reason').setDescription('Reason')),
-async execute(interaction){const member=interaction.options.getMember('user');const ms=parseDuration(interaction.options.getString('duration'));const reason=interaction.options.getString('reason')||'No reason provided';
-if(!member||!ms||ms>2419200000)return interaction.reply({embeds:[errorEmbed('Invalid Mute','Use 10m, 2h, 3d, or up to 4w.')],ephemeral:true});
-if(!member.moderatable)return interaction.reply({embeds:[errorEmbed('Cannot Mute','Move the bot role above the target’s highest role.')],ephemeral:true});
-await member.timeout(ms,reason);logModAction(interaction.guild.id,member.id,interaction.user.id,'mute',reason,ms);return interaction.reply({embeds:[successEmbed('Member Muted',`${member} was timed out for **${interaction.options.getString('duration')}**.\n**Reason:** ${reason}`)]});}}
+
+// Role-based mute (distinct from native /timeout) - useful when you want a mute
+// that persists indefinitely or applies a custom "Muted" role with its own channel overrides.
+module.exports = {
+    data: new SlashCommandBuilder()
+        .setName('mute')
+        .setDescription('Apply the configured Muted role to a member indefinitely')
+        .setDefaultMemberPermissions(PermissionFlagsBits.ModerateMembers)
+        .addUserOption(o => o.setName('user').setDescription('User to mute').setRequired(true))
+        .addStringOption(o => o.setName('reason').setDescription('Reason').setRequired(true)),
+
+    async execute(interaction) {
+        const mutedRoleId = getConfig(interaction.guild.id, 'muted_role_id');
+        if (!mutedRoleId) return interaction.reply({ embeds: [errorEmbed('Not Configured', 'Set a Muted role first: `/config set-role key:muted_role_id role:@Muted`')], ephemeral: true });
+
+        const user = interaction.options.getUser('user');
+        const reason = interaction.options.getString('reason');
+        const member = await interaction.guild.members.fetch(user.id).catch(() => null);
+        if (!member) return interaction.reply({ embeds: [errorEmbed('Member Not Found')], ephemeral: true });
+
+        await member.roles.add(mutedRoleId, reason).catch(() => null);
+        logModAction(interaction.guild.id, user.id, interaction.user.id, 'mute', reason);
+
+        await user.send({ embeds: [errorEmbed('You have been muted', `**Server:** ${interaction.guild.name}\n**Reason:** ${reason}`)] }).catch(() => {});
+        await sendLog(interaction.guild, 'log_channel_mod', { title: 'Member Muted', description: `<@${user.id}> muted by <@${interaction.user.id}>`, fields: [{ name: 'Reason', value: reason }] });
+
+        return interaction.reply({ embeds: [successEmbed('Member Muted', `<@${user.id}> has been muted.\n**Reason:** ${reason}`)] });
+    },
+};

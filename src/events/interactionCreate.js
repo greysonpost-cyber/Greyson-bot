@@ -1,9 +1,8 @@
 const { errorEmbed } = require('../utils/embeds');
-const { canRunCommand } = require('../utils/permissions');
+const { canRunCommand, hasCommandPermissions } = require('../utils/permissions');
 const ticketHandler = require('../handlers/ticketHandler');
 const reportHandler = require('../handlers/reportHandler');
 const giveawayHandler = require('../handlers/giveawayHandler');
-const wheelHandler = require('../handlers/wheelHandler');
 
 module.exports = {
     name: 'interactionCreate',
@@ -14,7 +13,11 @@ module.exports = {
                 const command = client.commands.get(interaction.commandName);
                 if (!command) return;
 
-                if (interaction.inGuild() && !canRunCommand(interaction.member, interaction.commandName)) {
+                const sub = interaction.options.getSubcommand(false);
+                const permissionKey = sub ? `${interaction.commandName}.${sub}` : interaction.commandName;
+                const keyToCheck = interaction.inGuild() && hasCommandPermissions(interaction.guild.id, permissionKey)
+                    ? permissionKey : interaction.commandName;
+                if (interaction.inGuild() && !canRunCommand(interaction.member, keyToCheck)) {
                     return interaction.reply({
                         embeds: [errorEmbed('No Permission', "You don't have permission to use this command.")],
                         ephemeral: true,
@@ -38,7 +41,6 @@ module.exports = {
             if (customId.startsWith('ticket_')) return ticketHandler.handleInteraction(interaction, client);
             if (customId.startsWith('report_')) return reportHandler.handleInteraction(interaction, client);
             if (customId.startsWith('giveaway_')) return giveawayHandler.handleInteraction(interaction, client);
-            if (customId.startsWith('wheel_')) return wheelHandler.handleInteraction(interaction, client);
         } catch (err) {
             console.error('[interactionCreate] Error:', err);
             const payload = { embeds: [errorEmbed('Something went wrong', 'That action could not be completed. Please try again or contact staff.')], ephemeral: true };

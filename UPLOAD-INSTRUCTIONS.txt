@@ -1,0 +1,26 @@
+UPLOAD THE EXTRACTED CONTENTS TO THE ROOT OF YOUR GITHUB REPOSITORY.
+Do not upload the ZIP as one file.
+
+Your repository root should contain:
+- package.json
+- package-lock.json
+- railway.json
+- src/
+- README.md
+- .env.example
+
+Required Railway variables:
+- DISCORD_TOKEN
+- CLIENT_ID
+- GUILD_ID
+
+Optional for full AI mention chat:
+- OPENAI_API_KEY
+- OPENAI_MODEL
+
+Railway commands are already configured:
+- Pre-deploy: npm run deploy
+- Start: npm start
+
+After deployment, use /config, /command-permissions, /role-permissions, /giveaway-config, /guild, and /ai to configure everything.
+Never share your Discord token or AI API key.

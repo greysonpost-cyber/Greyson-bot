@@ -1,13 +1,12 @@
 {
-  "name": "grow-a-garden-bot",
-  "version": "1.0.0",
-  "description": "All-in-one custom Discord bot for Grow a Garden guild server (tickets, reports, moderation, guild management, giveaways).",
+  "name": "dripcore-discord-bot",
+  "version": "2.0.0",
+  "description": "DripCore all-in-one Discord bot with guild rosters, giveaways, permissions, reports, moderation, and AI guidance.",
   "main": "src/index.js",
   "type": "commonjs",
   "scripts": {
-    "start": "node src/deploy-commands.js && node src/index.js",
-    "deploy": "node src/deploy-commands.js",
-    "bot": "node src/index.js"
+    "start": "node src/index.js",
+    "deploy": "node src/deploy-commands.js"
   },
   "dependencies": {
     "better-sqlite3": "^11.3.0",

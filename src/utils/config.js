@@ -7,7 +7,9 @@ const CONFIG_KEYS = [
     'log_channel_voice', 'log_channel_ticket', 'log_channel_report', 'log_channel_channel',
     'ticket_category_id', 'ticket_transcript_channel', 'ticket_auto_delete_minutes',
     'report_channel', 'report_thread_enabled',
-    'guild_accept_role', 'giveaway_default_channel',
+    'guild_accept_role', 'guild_roster_channel', 'guild_roster_message', 'giveaway_default_channel',
+    'giveaway_ticket_category', 'giveaway_staff_role', 'giveaway_default_claim_minutes',
+    'ai_enabled', 'ai_knowledge', 'ai_help_channel', 'ai_guild_channel', 'ai_giveaway_channel', 'ai_staff_role',
     'auto_role_on_join', 'auto_role_on_verify', 'auto_role_on_guild_accept', 'auto_role_on_ticket_accept',
 ];
 

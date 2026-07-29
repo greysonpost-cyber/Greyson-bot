@@ -3,49 +3,42 @@ const fs = require('fs');
 const path = require('path');
 const { REST, Routes } = require('discord.js');
 
-const required = ['DISCORD_TOKEN', 'CLIENT_ID', 'GUILD_ID'];
-const missing = required.filter(name => !process.env[name]);
-if (missing.length) {
-    console.error(`[config] Missing Railway variable(s): ${missing.join(', ')}`);
-    process.exit(1);
-}
-
 const commands = [];
 const commandsRoot = path.join(__dirname, 'commands');
 for (const folder of fs.readdirSync(commandsRoot)) {
-    const folderPath = path.join(commandsRoot, folder);
-    if (!fs.statSync(folderPath).isDirectory()) continue;
-    for (const file of fs.readdirSync(folderPath).filter(f => f.endsWith('.js'))) {
-        const commandPath = path.join(folderPath, file);
-        try {
-            const command = require(commandPath);
-            if (command?.data) commands.push(command.data.toJSON());
-        } catch (error) {
-            console.error(`[commands] Invalid slash command in ${folder}/${file}:`, error);
-            process.exit(1);
-        }
-    }
-}
-
-const rest = new REST().setToken(process.env.DISCORD_TOKEN);
-
-(async () => {
+  const folderPath = path.join(commandsRoot, folder);
+  if (!fs.statSync(folderPath).isDirectory()) continue;
+  for (const file of fs.readdirSync(folderPath).filter(f => f.endsWith('.js'))) {
+    const full = path.join(folderPath, file);
     try {
-        console.log(`Deploying ${commands.length} slash commands...`);
-
-        let route;
-        if (process.env.GUILD_ID) {
-            // Guild-scoped: updates instantly, great for development.
-            route = Routes.applicationGuildCommands(process.env.CLIENT_ID, process.env.GUILD_ID);
-        } else {
-            // Global: can take up to an hour to propagate.
-            route = Routes.applicationCommands(process.env.CLIENT_ID);
-        }
-
-        const data = await rest.put(route, { body: commands });
-        console.log(`Successfully deployed ${data.length} commands${process.env.GUILD_ID ? ' to guild ' + process.env.GUILD_ID : ' globally'}.`);
+      const command = require(full);
+      if (!command?.data) throw new Error('Missing data export');
+      const json = command.data.toJSON();
+      if (!json.name || !json.description) throw new Error('Command is missing a name or description');
+      commands.push(json);
+      console.log(`[deploy] Validated ${folder}/${file} -> /${json.name}`);
     } catch (err) {
-        console.error('[deploy] Failed to register slash commands:', err);
-        process.exitCode = 1;
+      console.error(`[deploy] Invalid command file: ${folder}/${file}`);
+      console.error(err);
+      process.exit(1);
     }
+  }
+}
+if (!process.env.DISCORD_TOKEN || !process.env.CLIENT_ID) {
+  console.error('[deploy] DISCORD_TOKEN and CLIENT_ID are required.');
+  process.exit(1);
+}
+const rest = new REST().setToken(process.env.DISCORD_TOKEN);
+(async () => {
+  try {
+    console.log(`Deploying ${commands.length} slash commands...`);
+    const route = process.env.GUILD_ID
+      ? Routes.applicationGuildCommands(process.env.CLIENT_ID, process.env.GUILD_ID)
+      : Routes.applicationCommands(process.env.CLIENT_ID);
+    const data = await rest.put(route, { body: commands });
+    console.log(`Successfully deployed ${data.length} commands${process.env.GUILD_ID ? ` to guild ${process.env.GUILD_ID}` : ' globally'}.`);
+  } catch (err) {
+    console.error('[deploy] Failed to register slash commands:', err);
+    process.exit(1);
+  }
 })();

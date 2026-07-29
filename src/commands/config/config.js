@@ -13,12 +13,14 @@ const CHANNEL_KEYS = [
     { name: 'Channel Create/Delete Logs', value: 'log_channel_channel' },
     { name: 'Report Submissions Channel', value: 'report_channel' },
     { name: 'Ticket Transcript Channel', value: 'ticket_transcript_channel' },
-    { name: 'Giveaway Log Channel', value: 'giveaway_log_channel' },
+    { name: 'Live Guild Roster Channel', value: 'guild_roster_channel' },
+    { name: 'Default Giveaway Channel', value: 'giveaway_default_channel' },
 ];
 
 const ROLE_KEYS = [
     { name: 'Guild Accept Role (given via /guild accept)', value: 'guild_accept_role' },
-        { name: 'Auto Role on Join', value: 'auto_role_on_join' },
+    { name: 'Muted Role (used by /mute)', value: 'muted_role_id' },
+    { name: 'Auto Role on Join', value: 'auto_role_on_join' },
     { name: 'Auto Role on Verify', value: 'auto_role_on_verify' },
     { name: 'Auto Role on Guild Accept', value: 'auto_role_on_guild_accept' },
     { name: 'Auto Role on Ticket Accept', value: 'auto_role_on_ticket_accept' },
@@ -44,10 +46,6 @@ module.exports = {
             .setDescription('Set a raw config value (advanced)')
             .addStringOption(o => o.setName('key').setDescription('Config key, e.g. ticket_auto_delete_minutes, report_thread_enabled').setRequired(true))
             .addStringOption(o => o.setName('value').setDescription('Value').setRequired(true)))
-        .addSubcommand(sc => sc.setName('set-giveaway-role')
-            .setDescription('Add a giveaway staff, auto-claim, claim-time, or bonus role')
-            .addStringOption(o => o.setName('type').setRequired(true).setDescription('Type').addChoices({name:'Giveaway Staff',value:'giveaway_staff_roles_json'},{name:'Auto Claim',value:'giveaway_auto_claim_roles_json'},{name:'Host Role',value:'host_roles_json'},{name:'Lock Role',value:'lock_roles_json'},{name:'Unlock Role',value:'unlock_roles_json'}))
-            .addRoleOption(o => o.setName('role').setRequired(true).setDescription('Role')))
         .addSubcommand(sc => sc.setName('view').setDescription('View all current configuration for this server'))
         .addSubcommand(sc => sc.setName('reset')
             .setDescription('Clear a configuration key')
@@ -88,15 +86,6 @@ module.exports = {
             const key = interaction.options.getString('key');
             deleteConfig(guildId, key);
             return interaction.reply({ embeds: [successEmbed('Config Reset', `**${key}** cleared.`)], ephemeral: true });
-        }
-
-        if (sub === 'set-giveaway-role') {
-            const key = interaction.options.getString('type');
-            const role = interaction.options.getRole('role');
-            const current = JSON.parse(require('../../utils/config').getConfig(guildId, key, '[]'));
-            if (!current.includes(role.id)) current.push(role.id);
-            setConfig(guildId, key, JSON.stringify(current));
-            return interaction.reply({ embeds: [successEmbed('Role Added', `${role} added to **${key}**.`)], ephemeral: true });
         }
 
         if (sub === 'view') {

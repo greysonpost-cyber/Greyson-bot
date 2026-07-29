@@ -1,11 +1,4 @@
 require('dotenv').config();
-
-const required = ['DISCORD_TOKEN'];
-const missing = required.filter(name => !process.env[name]);
-if (missing.length) {
-    console.error(`[config] Missing Railway variable(s): ${missing.join(', ')}`);
-    process.exit(1);
-}
 const fs = require('fs');
 const path = require('path');
 const { Client, GatewayIntentBits, Partials, Collection } = require('discord.js');
