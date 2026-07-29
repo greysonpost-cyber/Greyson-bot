@@ -82,8 +82,7 @@ function autoClaim(member) {
 }
 
 function voteText(claim, votes) {
-  const winnerClaim = votes.winner_claimed ? '✅' : '⬜';
-  const hostClaim = votes.host_claimed ? '✅' : '⬜';
+  const winnerClaim = claim.claimed ? '✅' : '⬜';
   const winnerFulfilled = votes.winner_fulfilled ? '✅' : '⬜';
   const hostFulfilled = votes.host_fulfilled ? '✅' : '⬜';
   return [
@@ -91,22 +90,25 @@ function voteText(claim, votes) {
     `**Winner:** <@${claim.winner_id}>`,
     `**Host:** <@${claim.host_id}>`,
     '',
-    `**Claim confirmation** — Winner ${winnerClaim} • Host ${hostClaim}`,
+    `**Claimed by winner:** ${winnerClaim}`,
     `**Fulfilled confirmation** — Winner ${winnerFulfilled} • Host ${hostFulfilled}`,
     '',
-    claim.claimed ? 'The prize is fully claimed.' : `Claim before <t:${Math.floor(claim.deadline_at / 1000)}:R>.`,
-    claim.resolved ? 'This giveaway ticket is resolved.' : 'Both people must confirm each stage.'
+    claim.claimed ? '**CLAIMED**' : `**WAITING ON CLAIM** — Claim before <t:${Math.floor(claim.deadline_at / 1000)}:R>.`,
+    claim.resolved ? 'Both parties confirmed fulfillment. This ticket may now be closed.' : 'The ticket cannot be closed until both parties press **Fulfilled**.'
   ].join('\n');
 }
 
-function activeTicketRows(claimId, votes) {
-  return [
-    new ActionRowBuilder().addComponents(
-      new ButtonBuilder().setCustomId(`giveaway_claim:${claimId}`).setLabel('Claim').setStyle(ButtonStyle.Success),
-      new ButtonBuilder().setCustomId(`giveaway_fulfilled:${claimId}`).setLabel('Fulfilled').setStyle(ButtonStyle.Primary),
-      new ButtonBuilder().setCustomId(`giveaway_close:${claimId}`).setLabel('Close').setStyle(ButtonStyle.Secondary)
-    )
-  ];
+function activeTicketRows(claim, votes) {
+  const buttons = [];
+  if (!claim.claimed && !claim.auto_claimed) {
+    buttons.push(new ButtonBuilder().setCustomId(`giveaway_claim:${claim.id}`).setLabel('Claim').setStyle(ButtonStyle.Success));
+  }
+  buttons.push(
+    new ButtonBuilder().setCustomId(`giveaway_fulfilled:${claim.id}`).setLabel('Fulfilled').setStyle(ButtonStyle.Primary),
+    new ButtonBuilder().setCustomId(`giveaway_close:${claim.id}`).setLabel('Close').setStyle(ButtonStyle.Secondary)
+      .setDisabled(!(votes.winner_fulfilled && votes.host_fulfilled))
+  );
+  return [new ActionRowBuilder().addComponents(...buttons)];
 }
 
 function closedTicketRows(claimId) {
@@ -150,13 +152,32 @@ async function refreshTicketMessage(channel, claimId, closed = false) {
   ensureVotes.run(claimId);
   const votes = getVotes.get(claimId);
   const embed = infoEmbed('🎉 Giveaway Claim Ticket', voteText(claim, votes));
-  const components = closed ? closedTicketRows(claimId) : activeTicketRows(claimId, votes);
+  const components = closed ? closedTicketRows(claimId) : activeTicketRows(claim, votes);
   if (claim.message_id) {
     const message = await channel.messages.fetch(claim.message_id).catch(() => null);
     if (message) return message.edit({ embeds: [embed], components });
   }
   const message = await channel.send({ embeds: [embed], components });
   db.prepare('UPDATE giveaway_claims SET message_id=? WHERE id=?').run(message.id, claimId);
+}
+
+async function updateClaimStatusMessage(guild, claim, status) {
+  const giveaway = getGiveaway.get(claim.giveaway_id);
+  if (!giveaway) return;
+  const channel = await guild.channels.fetch(giveaway.channel_id).catch(() => null);
+  if (!channel?.isTextBased()) return;
+  const content = status === 'claimed'
+    ? `**CLAIMED** — <@${claim.winner_id}> claimed **${giveaway.prize}**.`
+    : `**WAITING ON CLAIM** — <@${claim.winner_id}> must claim **${giveaway.prize}** before <t:${Math.floor(claim.deadline_at / 1000)}:R>.`;
+  if (claim.status_message_id) {
+    const oldMessage = await channel.messages.fetch(claim.status_message_id).catch(() => null);
+    if (oldMessage) {
+      await oldMessage.edit({ content, embeds: [] }).catch(() => {});
+      return;
+    }
+  }
+  const message = await channel.send({ content }).catch(() => null);
+  if (message) db.prepare('UPDATE giveaway_claims SET status_message_id=? WHERE id=?').run(message.id, claim.id);
 }
 
 async function createWinnerTicket(guild, g, winnerId) {
@@ -173,6 +194,7 @@ async function createWinnerTicket(guild, g, winnerId) {
   const claim = db.prepare('SELECT * FROM giveaway_claims WHERE giveaway_id=? AND winner_id=?').get(g.id, winnerId);
   ensureVotes.run(claim.id);
   if (automatic) db.prepare('UPDATE giveaway_ticket_votes SET winner_claimed=1 WHERE claim_id=?').run(claim.id);
+  await updateClaimStatusMessage(guild, claim, automatic ? 'claimed' : 'waiting');
 
   const categoryId = getConfig(guild.id, 'giveaway_ticket_category');
   const staffRole = getConfig(guild.id, 'giveaway_staff_role');
@@ -228,9 +250,9 @@ async function rerollExpired(client, claim) {
   if (claim.ticket_channel_id && guild) {
     const channel = await guild.channels.fetch(claim.ticket_channel_id).catch(() => null);
     if (channel) {
-      await channel.send({ embeds: [errorEmbed('Claim Time Expired', 'Both claim confirmations were not completed in time. A new winner is being selected.')] });
+      await channel.send({ embeds: [errorEmbed('Claim Time Expired', 'The winner did not claim in time. A new winner is being selected.')] });
       await sendTranscript(guild, channel, claim).catch(() => {});
-      setTimeout(() => channel.delete().catch(() => {}), 10_000);
+      setTimeout(() => channel.delete().catch(() => {}), 3_000);
     }
   }
   const winners = await pickWinners({ ...old, winner_count: 1 });
@@ -279,25 +301,38 @@ async function handleInteraction(i, client) {
   const isHost = i.user.id === claim.host_id;
   const isStaff = i.member.permissions.has(PermissionFlagsBits.ManageChannels) || i.member.permissions.has(PermissionFlagsBits.Administrator);
 
-  if (action === 'giveaway_claim' || action === 'giveaway_fulfilled') {
-    if (!isWinner && !isHost) return i.reply({ embeds: [errorEmbed('Not Allowed', 'Only the giveaway winner and host can confirm this.')], ephemeral: true });
+  if (action === 'giveaway_claim') {
+    if (!isWinner) return i.reply({ embeds: [errorEmbed('Not Allowed', 'Only the giveaway winner can claim this prize.')], ephemeral: true });
+    if (claim.auto_claimed || claim.claimed) return i.reply({ embeds: [errorEmbed('Already Claimed')], ephemeral: true });
     ensureVotes.run(id);
-    const field = action === 'giveaway_claim'
-      ? (isWinner ? 'winner_claimed' : 'host_claimed')
-      : (isWinner ? 'winner_fulfilled' : 'host_fulfilled');
-    db.prepare(`UPDATE giveaway_ticket_votes SET ${field}=1 WHERE claim_id=?`).run(id);
-    let votes = getVotes.get(id);
-    if (votes.winner_claimed && votes.host_claimed && !claim.claimed) db.prepare('UPDATE giveaway_claims SET claimed=1 WHERE id=?').run(id);
-    if (votes.winner_fulfilled && votes.host_fulfilled) db.prepare('UPDATE giveaway_claims SET resolved=1 WHERE id=?').run(id);
+    db.prepare('UPDATE giveaway_ticket_votes SET winner_claimed=1 WHERE claim_id=?').run(id);
+    db.prepare("UPDATE giveaway_claims SET claimed=1,status='claimed',claimed_at=? WHERE id=?").run(Date.now(), id);
+    const updatedClaim = getClaim.get(id);
+    await updateClaimStatusMessage(i.guild, updatedClaim, 'claimed');
     await refreshTicketMessage(i.channel, id, false);
-    votes = getVotes.get(id);
-    const stage = action === 'giveaway_claim' ? 'claim' : 'fulfillment';
-    const bothDone = action === 'giveaway_claim' ? votes.winner_claimed && votes.host_claimed : votes.winner_fulfilled && votes.host_fulfilled;
-    return i.reply({ embeds: [successEmbed('Confirmation Saved', bothDone ? `Both people confirmed ${stage}.` : `Your ${stage} confirmation was saved. Waiting for the other person.`)], ephemeral: true });
+    return i.reply({ embeds: [successEmbed('Giveaway Claimed', 'Your claim was saved. Both you and the host must press **Fulfilled** after the prize is delivered.')], ephemeral: true });
+  }
+
+  if (action === 'giveaway_fulfilled') {
+    if (!isWinner && !isHost) return i.reply({ embeds: [errorEmbed('Not Allowed', 'Only the giveaway winner and host can confirm fulfillment.')], ephemeral: true });
+    if (!claim.claimed) return i.reply({ embeds: [errorEmbed('Not Claimed Yet', 'The winner must press **Claim** first.')], ephemeral: true });
+    ensureVotes.run(id);
+    const field = isWinner ? 'winner_fulfilled' : 'host_fulfilled';
+    db.prepare(`UPDATE giveaway_ticket_votes SET ${field}=1 WHERE claim_id=?`).run(id);
+    const votes = getVotes.get(id);
+    if (votes.winner_fulfilled && votes.host_fulfilled) {
+      db.prepare("UPDATE giveaway_claims SET resolved=1,status='fulfilled',fulfilled_at=? WHERE id=?").run(Date.now(), id);
+    }
+    await refreshTicketMessage(i.channel, id, false);
+    const bothDone = votes.winner_fulfilled && votes.host_fulfilled;
+    return i.reply({ embeds: [successEmbed('Fulfillment Saved', bothDone ? 'Both parties confirmed fulfillment. The ticket can now be closed.' : 'Your confirmation was saved. Waiting for the other party.')], ephemeral: true });
   }
 
   if (action === 'giveaway_close') {
     if (!isWinner && !isHost && !isStaff) return i.reply({ embeds: [errorEmbed('Not Allowed')], ephemeral: true });
+    ensureVotes.run(id);
+    const votes = getVotes.get(id);
+    if (!votes.winner_fulfilled || !votes.host_fulfilled) return i.reply({ embeds: [errorEmbed('Cannot Close Yet', 'Both the winner and host must press **Fulfilled** before this ticket can be closed.')], ephemeral: true });
     await i.deferReply();
     await sendTranscript(i.guild, i.channel, claim).catch(() => {});
     ensureVotes.run(id);

@@ -78,3 +78,5 @@ module.exports = db;
 // v2.2 giveaway ticket confirmation compatibility.
 ensureColumn('giveaway_claims', 'host_id', 'TEXT');
 ensureColumn('giveaway_claims', 'message_id', 'TEXT');
+// v2.2.3 giveaway channel claim status message.
+ensureColumn('giveaway_claims', 'status_message_id', 'TEXT');

@@ -1,24 +1,19 @@
-DRIPCORE GUILD PERMISSION FIX
+DripCore v2.2.3 Giveaway Claim Update
 
-This is an incremental update. Do NOT delete your repository.
+This is an incremental update. Do NOT delete your repository files.
 
-Upload the included "src" folder to the ROOT of your GitHub repository.
-When GitHub asks, allow these three existing files to be replaced:
+1. Extract this ZIP.
+2. Upload the included src folder to the ROOT of your GitHub repository.
+3. Choose Replace/Overwrite for the two matching files.
+4. Commit the changes and allow Railway to redeploy.
 
-- src/commands/roles/command-permissions.js
-- src/events/interactionCreate.js
-- src/utils/permissions.js
+Changed files:
+- src/handlers/giveawayHandler.js
+- src/database/db.js
 
-After Railway redeploys:
-1. Run /command-permissions manage
-2. Select the Elders role
-3. Choose Add permissions
-4. Choose Guild
-5. Select "All Guild Commands" (or select individual guild commands)
-6. Run /command-permissions list and select Elders to verify it saved
-
-The update fixes:
-- All Guild Commands now applies to every /guild subcommand.
-- Parent and individual subcommand permissions work together correctly.
-- The menu now contains the real guild subcommands.
-- The permission list shows readable command names.
+Changes:
+- Only the winner presses Claim; the host does not.
+- Both winner and host must press Fulfilled before Close is enabled/allowed.
+- Unclaimed tickets expire, create a transcript, auto-delete, and reroll.
+- Auto-claim winners skip the Claim button and go directly to fulfillment.
+- Giveaway channel displays **WAITING ON CLAIM** and updates it to **CLAIMED**.
