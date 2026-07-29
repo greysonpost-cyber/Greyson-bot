@@ -74,3 +74,7 @@ ensureColumn('giveaway_claims', 'fulfilled_at', 'INTEGER');
 ensureColumn('giveaway_claims', 'handled_by', 'TEXT');
 
 module.exports = db;
+
+// v2.2 giveaway ticket confirmation compatibility.
+ensureColumn('giveaway_claims', 'host_id', 'TEXT');
+ensureColumn('giveaway_claims', 'message_id', 'TEXT');

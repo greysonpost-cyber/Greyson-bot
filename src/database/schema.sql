@@ -192,3 +192,13 @@ CREATE TABLE IF NOT EXISTS wheel_sessions (
     status TEXT NOT NULL DEFAULT 'open',
     created_at INTEGER NOT NULL
 );
+
+CREATE TABLE IF NOT EXISTS giveaway_ticket_votes (
+    claim_id INTEGER PRIMARY KEY,
+    winner_claimed INTEGER NOT NULL DEFAULT 0,
+    host_claimed INTEGER NOT NULL DEFAULT 0,
+    winner_fulfilled INTEGER NOT NULL DEFAULT 0,
+    host_fulfilled INTEGER NOT NULL DEFAULT 0,
+    closed INTEGER NOT NULL DEFAULT 0,
+    transcript_sent INTEGER NOT NULL DEFAULT 0
+);

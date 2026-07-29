@@ -1,38 +1,335 @@
-const { ActionRowBuilder, ButtonBuilder, ButtonStyle, PermissionFlagsBits, ChannelType } = require('discord.js');
+const {
+  ActionRowBuilder, ButtonBuilder, ButtonStyle, PermissionFlagsBits,
+  ChannelType, AttachmentBuilder
+} = require('discord.js');
 const db = require('../database/db');
 const { successEmbed, errorEmbed, baseEmbed, infoEmbed } = require('../utils/embeds');
 const { sendLog } = require('../utils/logger');
 const { getConfig } = require('../utils/config');
 
-const getGiveaway=db.prepare('SELECT * FROM giveaways WHERE id=?');
-const getGiveawayByMessage=db.prepare('SELECT * FROM giveaways WHERE message_id=?');
-const updateEnded=db.prepare('UPDATE giveaways SET ended=1,winners_json=? WHERE id=?');
-const updateLocked=db.prepare('UPDATE giveaways SET locked=? WHERE id=?');
-const dueGiveaways=db.prepare('SELECT * FROM giveaways WHERE ended=0 AND ends_at<=?');
-const upsertEntry=db.prepare('INSERT INTO giveaway_entries (giveaway_id,user_id,entries) VALUES (?,?,?) ON CONFLICT(giveaway_id,user_id) DO UPDATE SET entries=excluded.entries');
-const getEntry=db.prepare('SELECT * FROM giveaway_entries WHERE giveaway_id=? AND user_id=?');
-const allEntries=db.prepare('SELECT * FROM giveaway_entries WHERE giveaway_id=?');
-const countEntries=db.prepare('SELECT COUNT(*) c FROM giveaway_entries WHERE giveaway_id=?');
-const dueClaims=db.prepare('SELECT * FROM giveaway_claims WHERE claimed=0 AND resolved=0 AND deadline_at<=?');
+const getGiveaway = db.prepare('SELECT * FROM giveaways WHERE id=?');
+const getGiveawayByMessage = db.prepare('SELECT * FROM giveaways WHERE message_id=?');
+const updateEnded = db.prepare('UPDATE giveaways SET ended=1,winners_json=? WHERE id=?');
+const updateLocked = db.prepare('UPDATE giveaways SET locked=? WHERE id=?');
+const dueGiveaways = db.prepare('SELECT * FROM giveaways WHERE ended=0 AND ends_at<=?');
+const upsertEntry = db.prepare('INSERT INTO giveaway_entries (giveaway_id,user_id,entries) VALUES (?,?,?) ON CONFLICT(giveaway_id,user_id) DO UPDATE SET entries=excluded.entries');
+const getEntry = db.prepare('SELECT * FROM giveaway_entries WHERE giveaway_id=? AND user_id=?');
+const allEntries = db.prepare('SELECT * FROM giveaway_entries WHERE giveaway_id=?');
+const countEntries = db.prepare('SELECT COUNT(*) c FROM giveaway_entries WHERE giveaway_id=?');
+const dueClaims = db.prepare('SELECT * FROM giveaway_claims WHERE claimed=0 AND resolved=0 AND deadline_at<=?');
+const getClaim = db.prepare('SELECT * FROM giveaway_claims WHERE id=?');
+const getVotes = db.prepare('SELECT * FROM giveaway_ticket_votes WHERE claim_id=?');
+const ensureVotes = db.prepare('INSERT OR IGNORE INTO giveaway_ticket_votes (claim_id) VALUES (?)');
 
-function entryButton(g){return new ActionRowBuilder().addComponents(new ButtonBuilder().setCustomId(`giveaway_enter:${g.id}`).setLabel('🎉 Enter Giveaway').setStyle(ButtonStyle.Success));}
-function claimButton(claimId){return new ActionRowBuilder().addComponents(new ButtonBuilder().setCustomId(`giveaway_claim:${claimId}`).setLabel('Claim Prize').setStyle(ButtonStyle.Success));}
-function giveawayEmbed(g){return baseEmbed().setTitle(`🎉 ${g.prize}`).setDescription(`Click below to enter!\n\n**Ends:** <t:${Math.floor(g.ends_at/1000)}:R>\n**Winners:** ${g.winner_count}\n**Hosted by:** <@${g.hosted_by}>\n${g.required_role_id?`**Required Role:** <@&${g.required_role_id}>\n`:''}${g.required_guild_rank?`**Required Guild Role:** ${g.required_guild_rank}\n`:''}\n**Entries:** ${countEntries.get(g.id).c}\n\nConfigured bonus-entry roles apply automatically.`);}
-function memberEntries(member){let n=1;for(const r of db.prepare('SELECT * FROM giveaway_bonus_roles WHERE guild_id=?').all(member.guild.id))if(member.roles.cache.has(r.role_id))n+=r.extra_entries;return n;}
-async function pickWinners(g){const entries=allEntries.all(g.id),pool=[];for(const e of entries)for(let i=0;i<e.entries;i++)pool.push(e.user_id);const winners=new Set(),unique=new Set(pool);while(winners.size<g.winner_count&&winners.size<unique.size)winners.add(pool[Math.floor(Math.random()*pool.length)]);return [...winners];}
-async function claimMinutes(member){let n=Number(getConfig(member.guild.id,'giveaway_default_claim_minutes','10'))||10;for(const r of db.prepare('SELECT * FROM giveaway_claim_time_roles WHERE guild_id=?').all(member.guild.id))if(member.roles.cache.has(r.role_id))n+=r.extra_minutes;return n;}
-function autoClaim(member){return db.prepare('SELECT role_id FROM giveaway_auto_claim_roles WHERE guild_id=?').all(member.guild.id).some(r=>member.roles.cache.has(r.role_id));}
+function entryButton(g) {
+  return new ActionRowBuilder().addComponents(
+    new ButtonBuilder().setCustomId(`giveaway_enter:${g.id}`).setLabel('🎉 0').setStyle(ButtonStyle.Primary),
+    new ButtonBuilder().setCustomId(`giveaway_participants:${g.id}`).setLabel('Participants').setEmoji('👥').setStyle(ButtonStyle.Secondary)
+  );
+}
 
-async function createWinnerTicket(guild,g,winnerId){const member=await guild.members.fetch(winnerId).catch(()=>null);if(!member)return null;const mins=await claimMinutes(member),auto=autoClaim(member),deadline=Date.now()+mins*60000;const info=db.prepare('INSERT OR REPLACE INTO giveaway_claims (giveaway_id,guild_id,winner_id,deadline_at,claimed,auto_claimed,resolved,created_at) VALUES (?,?,?,?,?,?,0,?)').run(g.id,guild.id,winnerId,deadline,auto?1:0,auto?1:0,Date.now());const claimId=info.lastInsertRowid||db.prepare('SELECT id FROM giveaway_claims WHERE giveaway_id=? AND winner_id=?').get(g.id,winnerId).id;
- const categoryId=getConfig(guild.id,'giveaway_ticket_category'),staffRole=getConfig(guild.id,'giveaway_staff_role');const overwrites=[{id:guild.roles.everyone.id,deny:[PermissionFlagsBits.ViewChannel]},{id:winnerId,allow:[PermissionFlagsBits.ViewChannel,PermissionFlagsBits.SendMessages,PermissionFlagsBits.ReadMessageHistory]},{id:guild.members.me.id,allow:[PermissionFlagsBits.ViewChannel,PermissionFlagsBits.SendMessages,PermissionFlagsBits.ManageChannels]}];if(staffRole)overwrites.push({id:staffRole,allow:[PermissionFlagsBits.ViewChannel,PermissionFlagsBits.SendMessages,PermissionFlagsBits.ReadMessageHistory]});
- const channel=await guild.channels.create({name:`gw-${g.id}-${member.user.username}`.toLowerCase().replace(/[^a-z0-9-]/g,'').slice(0,90),type:ChannelType.GuildText,parent:categoryId||undefined,permissionOverwrites:overwrites,reason:`Giveaway #${g.id} winner claim`}).catch(()=>null);if(!channel)return null;db.prepare('UPDATE giveaway_claims SET ticket_channel_id=? WHERE id=?').run(channel.id,claimId);await channel.send({content:`<@${winnerId}>${staffRole?` <@&${staffRole}>`:''}`,embeds:[infoEmbed(auto?'🎉 Prize Auto-Claimed':'🎉 You Won!',`You won **${g.prize}** in giveaway **#${g.id}**.\n${auto?'Your configured role automatically marked this prize claimed.':'Press **Claim Prize** before'} ${auto?'':`<t:${Math.floor(deadline/1000)}:R> or the bot will reroll.`}`)],components:auto?[]:[claimButton(claimId)]});return channel;}
+function bonusRoleLines(guildId) {
+  const rows = db.prepare('SELECT * FROM giveaway_bonus_roles WHERE guild_id=? ORDER BY extra_entries DESC').all(guildId);
+  if (!rows.length) return '';
+  return `\n\n**Extra Entries:**\n${rows.map(r => `<@&${r.role_id}>: **${r.extra_entries} extra entr${r.extra_entries === 1 ? 'y' : 'ies'}**`).join('\n')}`;
+}
 
-async function endGiveaway(client,id,{reroll=false}={}){const g=getGiveaway.get(id);if(!g)return null;const guild=await client.guilds.fetch(g.guild_id).catch(()=>null);if(!guild)return null;const channel=await guild.channels.fetch(g.channel_id).catch(()=>null);const winners=await pickWinners(g);updateEnded.run(JSON.stringify(winners),id);const text=winners.length?winners.map(x=>`<@${x}>`).join(', '):'No valid entries.';if(channel){await channel.send({embeds:[successEmbed(reroll?'🎉 Giveaway Rerolled!':'🎉 Giveaway Ended!',`**${g.prize}**\n**Winner(s):** ${text}\nWinner claim tickets are created automatically.`)]});if(g.message_id){const m=await channel.messages.fetch(g.message_id).catch(()=>null);if(m)await m.edit({embeds:[giveawayEmbed(g).setTitle(`🎉 [ENDED] ${g.prize}`)],components:[]}).catch(()=>{});}}for(const w of winners)await createWinnerTicket(guild,g,w);await sendLog(guild,'log_channel_mod',{title:reroll?'Giveaway Rerolled':'Giveaway Ended',description:`${g.prize} • ${text}`});return winners;}
+function giveawayEmbed(g) {
+  const requirement = g.required_role_id ? `\n\n**Requirements:** <@&${g.required_role_id}>` : '';
+  const guildReq = g.required_guild_rank ? `\n**Required Guild Role:** ${g.required_guild_rank}` : '';
+  return baseEmbed()
+    .setTitle(g.prize)
+    .setDescription(
+      `Click 🎉 to enter!\n` +
+      `**Winners:** ${g.winner_count}\n` +
+      `**Ends:** <t:${Math.floor(g.ends_at / 1000)}:R> ([Timer](https://discord.com))` +
+      bonusRoleLines(g.guild_id) + requirement + guildReq +
+      `\n\n**Hosted by:** <@${g.hosted_by}>\n**Entries:** ${countEntries.get(g.id).c}`
+    );
+}
 
-async function rerollExpired(client,claim){db.prepare('UPDATE giveaway_claims SET resolved=1 WHERE id=?').run(claim.id);const old=getGiveaway.get(claim.giveaway_id);if(!old)return;db.prepare('DELETE FROM giveaway_entries WHERE giveaway_id=? AND user_id=?').run(old.id,claim.winner_id);const guild=await client.guilds.fetch(claim.guild_id).catch(()=>null);if(claim.ticket_channel_id&&guild){const c=await guild.channels.fetch(claim.ticket_channel_id).catch(()=>null);if(c){await c.send({embeds:[errorEmbed('Claim Time Expired','The prize was not claimed in time. A new winner is being selected.')],components:[]});setTimeout(()=>c.delete().catch(()=>{}),10000);}}const winners=await pickWinners({...old,winner_count:1});if(!winners.length)return;const winner=winners[0];const ch=await guild.channels.fetch(old.channel_id).catch(()=>null);if(ch)await ch.send({embeds:[successEmbed('🎉 Automatic Reroll',`<@${claim.winner_id}> did not claim **${old.prize}** in time.\nNew winner: <@${winner}>`)]});await createWinnerTicket(guild,old,winner);}
+function memberEntries(member) {
+  let total = 1;
+  for (const role of db.prepare('SELECT * FROM giveaway_bonus_roles WHERE guild_id=?').all(member.guild.id)) {
+    if (member.roles.cache.has(role.role_id)) total += role.extra_entries;
+  }
+  return total;
+}
 
-async function handleInteraction(i,client){const [action,idRaw]=i.customId.split(':');const id=Number(idRaw);if(action==='giveaway_enter'){const g=getGiveaway.get(id);if(!g)return i.reply({embeds:[errorEmbed('Giveaway Not Found')],ephemeral:true});if(g.ended||g.locked)return i.reply({embeds:[errorEmbed(g.ended?'Giveaway Ended':'Giveaway Locked')],ephemeral:true});if(g.required_role_id&&!i.member.roles.cache.has(g.required_role_id))return i.reply({embeds:[errorEmbed('Not Eligible',`You need <@&${g.required_role_id}>.`)],ephemeral:true});if(g.required_guild_rank){const row=db.prepare('SELECT guild_rank FROM guild_members WHERE guild_id=? AND discord_id=? AND active=1').get(i.guild.id,i.user.id);if(!row||row.guild_rank.toLowerCase()!==g.required_guild_rank.toLowerCase())return i.reply({embeds:[errorEmbed('Not Eligible',`You need the guild role **${g.required_guild_rank}**.`)],ephemeral:true});}const existing=getEntry.get(id,i.user.id);if(existing)return i.reply({embeds:[successEmbed('Already Entered',`You have **${existing.entries}** entries.`)],ephemeral:true});const n=memberEntries(i.member);upsertEntry.run(id,i.user.id,n);return i.reply({embeds:[successEmbed('Entered!',`You have **${n}** entr${n===1?'y':'ies'} based on your configured roles.`)],ephemeral:true});}
- if(action==='giveaway_claim'){const claim=db.prepare('SELECT * FROM giveaway_claims WHERE id=?').get(id);if(!claim||claim.winner_id!==i.user.id)return i.reply({embeds:[errorEmbed('Not Your Claim','Only the selected winner can claim this prize.')],ephemeral:true});if(claim.claimed)return i.reply({embeds:[successEmbed('Already Claimed')],ephemeral:true});if(Date.now()>claim.deadline_at)return i.reply({embeds:[errorEmbed('Claim Time Expired')],ephemeral:true});db.prepare('UPDATE giveaway_claims SET claimed=1,resolved=1 WHERE id=?').run(id);return i.update({embeds:[successEmbed('Prize Claimed!',`<@${i.user.id}> claimed this prize. Staff can now complete delivery in this ticket.`)],components:[]});}}
+async function pickWinners(g) {
+  const entries = allEntries.all(g.id);
+  const pool = [];
+  for (const entry of entries) for (let n = 0; n < entry.entries; n += 1) pool.push(entry.user_id);
+  const winners = new Set();
+  const unique = new Set(pool);
+  while (winners.size < g.winner_count && winners.size < unique.size && pool.length) {
+    winners.add(pool[Math.floor(Math.random() * pool.length)]);
+  }
+  return [...winners];
+}
 
-function startScheduler(client){setInterval(async()=>{for(const g of dueGiveaways.all(Date.now()))await endGiveaway(client,g.id).catch(e=>console.error('[giveaway scheduler]',e));for(const c of dueClaims.all(Date.now()))await rerollExpired(client,c).catch(e=>console.error('[claim scheduler]',e));},15000);}
-module.exports={handleInteraction,entryButton,giveawayEmbed,endGiveaway,startScheduler,updateLocked,getGiveawayByMessage};
+async function claimMinutes(member) {
+  let minutes = Number(getConfig(member.guild.id, 'giveaway_default_claim_minutes', '10')) || 10;
+  for (const role of db.prepare('SELECT * FROM giveaway_claim_time_roles WHERE guild_id=?').all(member.guild.id)) {
+    if (member.roles.cache.has(role.role_id)) minutes += role.extra_minutes;
+  }
+  return minutes;
+}
+
+function autoClaim(member) {
+  return db.prepare('SELECT role_id FROM giveaway_auto_claim_roles WHERE guild_id=?').all(member.guild.id)
+    .some(role => member.roles.cache.has(role.role_id));
+}
+
+function voteText(claim, votes) {
+  const winnerClaim = votes.winner_claimed ? '✅' : '⬜';
+  const hostClaim = votes.host_claimed ? '✅' : '⬜';
+  const winnerFulfilled = votes.winner_fulfilled ? '✅' : '⬜';
+  const hostFulfilled = votes.host_fulfilled ? '✅' : '⬜';
+  return [
+    `**Prize:** Giveaway #${claim.giveaway_id}`,
+    `**Winner:** <@${claim.winner_id}>`,
+    `**Host:** <@${claim.host_id}>`,
+    '',
+    `**Claim confirmation** — Winner ${winnerClaim} • Host ${hostClaim}`,
+    `**Fulfilled confirmation** — Winner ${winnerFulfilled} • Host ${hostFulfilled}`,
+    '',
+    claim.claimed ? 'The prize is fully claimed.' : `Claim before <t:${Math.floor(claim.deadline_at / 1000)}:R>.`,
+    claim.resolved ? 'This giveaway ticket is resolved.' : 'Both people must confirm each stage.'
+  ].join('\n');
+}
+
+function activeTicketRows(claimId, votes) {
+  return [
+    new ActionRowBuilder().addComponents(
+      new ButtonBuilder().setCustomId(`giveaway_claim:${claimId}`).setLabel('Claim').setStyle(ButtonStyle.Success),
+      new ButtonBuilder().setCustomId(`giveaway_fulfilled:${claimId}`).setLabel('Fulfilled').setStyle(ButtonStyle.Primary),
+      new ButtonBuilder().setCustomId(`giveaway_close:${claimId}`).setLabel('Close').setStyle(ButtonStyle.Secondary)
+    )
+  ];
+}
+
+function closedTicketRows(claimId) {
+  return [new ActionRowBuilder().addComponents(
+    new ButtonBuilder().setCustomId(`giveaway_reopen:${claimId}`).setLabel('Reopen').setStyle(ButtonStyle.Success),
+    new ButtonBuilder().setCustomId(`giveaway_delete:${claimId}`).setLabel('Delete').setStyle(ButtonStyle.Danger)
+  )];
+}
+
+async function generateTranscript(channel) {
+  const fetched = await channel.messages.fetch({ limit: 100 });
+  const messages = [...fetched.values()].reverse();
+  const lines = messages.map(message => {
+    const attachments = [...message.attachments.values()].map(a => a.url).join(' ');
+    return `[${new Date(message.createdTimestamp).toISOString()}] ${message.author.tag}: ${message.content}${attachments ? ` ${attachments}` : ''}`;
+  });
+  return Buffer.from(lines.join('\n') || '(no messages)', 'utf8');
+}
+
+async function sendTranscript(guild, channel, claim) {
+  ensureVotes.run(claim.id);
+  const votes = getVotes.get(claim.id);
+  if (votes.transcript_sent) return;
+  const transcript = await generateTranscript(channel);
+  const file = new AttachmentBuilder(transcript, { name: `giveaway-${claim.giveaway_id}-claim-${claim.id}-transcript.txt` });
+  const transcriptChannelId = getConfig(guild.id, 'ticket_transcript_channel') || getConfig(guild.id, 'giveaway_transcript_channel');
+  if (transcriptChannelId) {
+    const destination = await guild.channels.fetch(transcriptChannelId).catch(() => null);
+    if (destination?.isTextBased()) {
+      await destination.send({ embeds: [infoEmbed('Giveaway Ticket Transcript', `Claim #${claim.id} • Winner <@${claim.winner_id}> • Host <@${claim.host_id}>`)], files: [file] });
+    }
+  } else {
+    await channel.send({ embeds: [infoEmbed('Automatic Transcript', 'The transcript is attached below.')], files: [file] });
+  }
+  db.prepare('UPDATE giveaway_ticket_votes SET transcript_sent=1 WHERE claim_id=?').run(claim.id);
+}
+
+async function refreshTicketMessage(channel, claimId, closed = false) {
+  const claim = getClaim.get(claimId);
+  if (!claim) return;
+  ensureVotes.run(claimId);
+  const votes = getVotes.get(claimId);
+  const embed = infoEmbed('🎉 Giveaway Claim Ticket', voteText(claim, votes));
+  const components = closed ? closedTicketRows(claimId) : activeTicketRows(claimId, votes);
+  if (claim.message_id) {
+    const message = await channel.messages.fetch(claim.message_id).catch(() => null);
+    if (message) return message.edit({ embeds: [embed], components });
+  }
+  const message = await channel.send({ embeds: [embed], components });
+  db.prepare('UPDATE giveaway_claims SET message_id=? WHERE id=?').run(message.id, claimId);
+}
+
+async function createWinnerTicket(guild, g, winnerId) {
+  const member = await guild.members.fetch(winnerId).catch(() => null);
+  if (!member) return null;
+  const host = await guild.members.fetch(g.hosted_by).catch(() => null);
+  const minutes = await claimMinutes(member);
+  const automatic = autoClaim(member);
+  const deadline = Date.now() + minutes * 60_000;
+  db.prepare(`INSERT OR REPLACE INTO giveaway_claims
+    (giveaway_id,guild_id,winner_id,host_id,deadline_at,claimed,auto_claimed,resolved,created_at)
+    VALUES (?,?,?,?,?,?,?,?,?)`)
+    .run(g.id, guild.id, winnerId, g.hosted_by, deadline, automatic ? 1 : 0, automatic ? 1 : 0, 0, Date.now());
+  const claim = db.prepare('SELECT * FROM giveaway_claims WHERE giveaway_id=? AND winner_id=?').get(g.id, winnerId);
+  ensureVotes.run(claim.id);
+  if (automatic) db.prepare('UPDATE giveaway_ticket_votes SET winner_claimed=1 WHERE claim_id=?').run(claim.id);
+
+  const categoryId = getConfig(guild.id, 'giveaway_ticket_category');
+  const staffRole = getConfig(guild.id, 'giveaway_staff_role');
+  const overwrites = [
+    { id: guild.roles.everyone.id, deny: [PermissionFlagsBits.ViewChannel] },
+    { id: winnerId, allow: [PermissionFlagsBits.ViewChannel, PermissionFlagsBits.SendMessages, PermissionFlagsBits.ReadMessageHistory, PermissionFlagsBits.AttachFiles] },
+    { id: g.hosted_by, allow: [PermissionFlagsBits.ViewChannel, PermissionFlagsBits.SendMessages, PermissionFlagsBits.ReadMessageHistory, PermissionFlagsBits.AttachFiles] },
+    { id: guild.members.me.id, allow: [PermissionFlagsBits.ViewChannel, PermissionFlagsBits.SendMessages, PermissionFlagsBits.ReadMessageHistory, PermissionFlagsBits.ManageChannels] }
+  ];
+  if (staffRole) overwrites.push({ id: staffRole, allow: [PermissionFlagsBits.ViewChannel, PermissionFlagsBits.SendMessages, PermissionFlagsBits.ReadMessageHistory] });
+
+  const channel = await guild.channels.create({
+    name: `gw-${g.id}-${member.user.username}`.toLowerCase().replace(/[^a-z0-9-]/g, '').slice(0, 90),
+    type: ChannelType.GuildText,
+    parent: categoryId || undefined,
+    permissionOverwrites: overwrites,
+    reason: `Giveaway #${g.id} winner claim`
+  }).catch(() => null);
+  if (!channel) return null;
+  db.prepare('UPDATE giveaway_claims SET ticket_channel_id=? WHERE id=?').run(channel.id, claim.id);
+  await channel.send({ content: `<@${winnerId}> <@${g.hosted_by}>${staffRole ? ` <@&${staffRole}>` : ''}` });
+  await refreshTicketMessage(channel, claim.id, false);
+  return channel;
+}
+
+async function endGiveaway(client, id, { reroll = false } = {}) {
+  const g = getGiveaway.get(id);
+  if (!g) return null;
+  const guild = await client.guilds.fetch(g.guild_id).catch(() => null);
+  if (!guild) return null;
+  const channel = await guild.channels.fetch(g.channel_id).catch(() => null);
+  const winners = await pickWinners(g);
+  updateEnded.run(JSON.stringify(winners), id);
+  const text = winners.length ? winners.map(userId => `<@${userId}>`).join(', ') : 'No valid entries.';
+  if (channel) {
+    await channel.send({ embeds: [successEmbed(reroll ? 'Giveaway Rerolled!' : 'Giveaway Ended!', `**${g.prize}**\n**Winner(s):** ${text}\nAutomatic claim tickets were created.`)] });
+    if (g.message_id) {
+      const message = await channel.messages.fetch(g.message_id).catch(() => null);
+      if (message) await message.edit({ embeds: [giveawayEmbed(g).setTitle(`[ENDED] ${g.prize}`)], components: [] }).catch(() => {});
+    }
+  }
+  for (const winner of winners) await createWinnerTicket(guild, g, winner);
+  await sendLog(guild, 'log_channel_mod', { title: reroll ? 'Giveaway Rerolled' : 'Giveaway Ended', description: `${g.prize} • ${text}` });
+  return winners;
+}
+
+async function rerollExpired(client, claim) {
+  db.prepare('UPDATE giveaway_claims SET resolved=1 WHERE id=?').run(claim.id);
+  const old = getGiveaway.get(claim.giveaway_id);
+  if (!old) return;
+  db.prepare('DELETE FROM giveaway_entries WHERE giveaway_id=? AND user_id=?').run(old.id, claim.winner_id);
+  const guild = await client.guilds.fetch(claim.guild_id).catch(() => null);
+  if (claim.ticket_channel_id && guild) {
+    const channel = await guild.channels.fetch(claim.ticket_channel_id).catch(() => null);
+    if (channel) {
+      await channel.send({ embeds: [errorEmbed('Claim Time Expired', 'Both claim confirmations were not completed in time. A new winner is being selected.')] });
+      await sendTranscript(guild, channel, claim).catch(() => {});
+      setTimeout(() => channel.delete().catch(() => {}), 10_000);
+    }
+  }
+  const winners = await pickWinners({ ...old, winner_count: 1 });
+  if (!winners.length || !guild) return;
+  const winner = winners[0];
+  const channel = await guild.channels.fetch(old.channel_id).catch(() => null);
+  if (channel) await channel.send({ embeds: [successEmbed('Automatic Reroll', `<@${claim.winner_id}> did not finish claiming **${old.prize}** in time.\nNew winner: <@${winner}>`)] });
+  await createWinnerTicket(guild, old, winner);
+}
+
+async function handleInteraction(i, client) {
+  const [action, idRaw] = i.customId.split(':');
+  const id = Number(idRaw);
+
+  if (action === 'giveaway_enter') {
+    const g = getGiveaway.get(id);
+    if (!g) return i.reply({ embeds: [errorEmbed('Giveaway Not Found')], ephemeral: true });
+    if (g.ended || g.locked) return i.reply({ embeds: [errorEmbed(g.ended ? 'Giveaway Ended' : 'Giveaway Locked')], ephemeral: true });
+    if (g.required_role_id && !i.member.roles.cache.has(g.required_role_id)) return i.reply({ embeds: [errorEmbed('Not Eligible', `You need <@&${g.required_role_id}>.`)], ephemeral: true });
+    if (g.required_guild_rank) {
+      const row = db.prepare('SELECT guild_rank FROM guild_members WHERE guild_id=? AND discord_id=? AND active=1').get(i.guild.id, i.user.id);
+      if (!row || row.guild_rank.toLowerCase() !== g.required_guild_rank.toLowerCase()) return i.reply({ embeds: [errorEmbed('Not Eligible', `You need the guild role **${g.required_guild_rank}**.`)], ephemeral: true });
+    }
+    const existing = getEntry.get(id, i.user.id);
+    if (existing) return i.reply({ embeds: [successEmbed('Already Entered', `You have **${existing.entries}** entries.`)], ephemeral: true });
+    const entries = memberEntries(i.member);
+    upsertEntry.run(id, i.user.id, entries);
+    const total = countEntries.get(id).c;
+    const message = i.message;
+    await message.edit({ embeds: [giveawayEmbed(g)], components: [new ActionRowBuilder().addComponents(
+      new ButtonBuilder().setCustomId(`giveaway_enter:${g.id}`).setLabel(`🎉 ${total}`).setStyle(ButtonStyle.Primary),
+      new ButtonBuilder().setCustomId(`giveaway_participants:${g.id}`).setLabel('Participants').setEmoji('👥').setStyle(ButtonStyle.Secondary)
+    )] }).catch(() => {});
+    return i.reply({ embeds: [successEmbed('Entered!', `You received **${entries}** entr${entries === 1 ? 'y' : 'ies'} based on your roles.`)], ephemeral: true });
+  }
+
+  if (action === 'giveaway_participants') {
+    const rows = allEntries.all(id);
+    const text = rows.length ? rows.map(row => `<@${row.user_id}> — **${row.entries}** entries`).join('\n') : 'No participants yet.';
+    return i.reply({ embeds: [infoEmbed('Giveaway Participants', text.slice(0, 3900))], ephemeral: true });
+  }
+
+  const claim = getClaim.get(id);
+  if (!claim) return i.reply({ embeds: [errorEmbed('Claim Not Found')], ephemeral: true });
+  const isWinner = i.user.id === claim.winner_id;
+  const isHost = i.user.id === claim.host_id;
+  const isStaff = i.member.permissions.has(PermissionFlagsBits.ManageChannels) || i.member.permissions.has(PermissionFlagsBits.Administrator);
+
+  if (action === 'giveaway_claim' || action === 'giveaway_fulfilled') {
+    if (!isWinner && !isHost) return i.reply({ embeds: [errorEmbed('Not Allowed', 'Only the giveaway winner and host can confirm this.')], ephemeral: true });
+    ensureVotes.run(id);
+    const field = action === 'giveaway_claim'
+      ? (isWinner ? 'winner_claimed' : 'host_claimed')
+      : (isWinner ? 'winner_fulfilled' : 'host_fulfilled');
+    db.prepare(`UPDATE giveaway_ticket_votes SET ${field}=1 WHERE claim_id=?`).run(id);
+    let votes = getVotes.get(id);
+    if (votes.winner_claimed && votes.host_claimed && !claim.claimed) db.prepare('UPDATE giveaway_claims SET claimed=1 WHERE id=?').run(id);
+    if (votes.winner_fulfilled && votes.host_fulfilled) db.prepare('UPDATE giveaway_claims SET resolved=1 WHERE id=?').run(id);
+    await refreshTicketMessage(i.channel, id, false);
+    votes = getVotes.get(id);
+    const stage = action === 'giveaway_claim' ? 'claim' : 'fulfillment';
+    const bothDone = action === 'giveaway_claim' ? votes.winner_claimed && votes.host_claimed : votes.winner_fulfilled && votes.host_fulfilled;
+    return i.reply({ embeds: [successEmbed('Confirmation Saved', bothDone ? `Both people confirmed ${stage}.` : `Your ${stage} confirmation was saved. Waiting for the other person.`)], ephemeral: true });
+  }
+
+  if (action === 'giveaway_close') {
+    if (!isWinner && !isHost && !isStaff) return i.reply({ embeds: [errorEmbed('Not Allowed')], ephemeral: true });
+    await i.deferReply();
+    await sendTranscript(i.guild, i.channel, claim).catch(() => {});
+    ensureVotes.run(id);
+    db.prepare('UPDATE giveaway_ticket_votes SET closed=1 WHERE claim_id=?').run(id);
+    await i.channel.permissionOverwrites.edit(claim.winner_id, { SendMessages: false }).catch(() => {});
+    await i.channel.permissionOverwrites.edit(claim.host_id, { SendMessages: false }).catch(() => {});
+    await refreshTicketMessage(i.channel, id, true);
+    return i.editReply({ embeds: [infoEmbed('Ticket Closed', 'Transcript created. Use **Reopen** or **Delete** below.')] });
+  }
+
+  if (action === 'giveaway_reopen') {
+    if (!isHost && !isStaff) return i.reply({ embeds: [errorEmbed('Not Allowed', 'Only the host or staff can reopen this ticket.')], ephemeral: true });
+    db.prepare('UPDATE giveaway_ticket_votes SET closed=0,transcript_sent=0 WHERE claim_id=?').run(id);
+    await i.channel.permissionOverwrites.edit(claim.winner_id, { SendMessages: true }).catch(() => {});
+    await i.channel.permissionOverwrites.edit(claim.host_id, { SendMessages: true }).catch(() => {});
+    await refreshTicketMessage(i.channel, id, false);
+    return i.reply({ embeds: [successEmbed('Ticket Reopened')], ephemeral: true });
+  }
+
+  if (action === 'giveaway_delete') {
+    if (!isHost && !isStaff) return i.reply({ embeds: [errorEmbed('Not Allowed', 'Only the host or staff can delete this ticket.')], ephemeral: true });
+    await sendTranscript(i.guild, i.channel, claim).catch(() => {});
+    await i.reply({ embeds: [infoEmbed('Deleting Ticket', 'This channel will be deleted in 3 seconds.')] });
+    return setTimeout(() => i.channel.delete().catch(() => {}), 3000);
+  }
+}
+
+function startScheduler(client) {
+  setInterval(async () => {
+    for (const giveaway of dueGiveaways.all(Date.now())) await endGiveaway(client, giveaway.id).catch(error => console.error('[giveaway scheduler]', error));
+    for (const claim of dueClaims.all(Date.now())) await rerollExpired(client, claim).catch(error => console.error('[claim scheduler]', error));
+  }, 15_000);
+}
+
+module.exports = { handleInteraction, entryButton, giveawayEmbed, endGiveaway, startScheduler, updateLocked, getGiveawayByMessage };
