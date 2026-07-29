@@ -69,3 +69,13 @@ Without an OpenAI API key, the bot uses built-in safe guidance. With a key, it p
 ## Bot permissions
 
 The bot should have Manage Roles, Manage Channels, Moderate Members, Kick Members, Ban Members, Manage Messages, View Channels, Send Messages, Read Message History, Embed Links, and Attach Files. Its role must be above any role it needs to assign.
+
+## Continuous AI chat (v2.1.0)
+Mention DripCore once to start an AI conversation. For the configured session time, DripCore will respond to later messages from that same member in the same channel without requiring another mention. The timer refreshes after each message. Say `stop`, `bye`, or `end chat` to end the session.
+
+Commands:
+- `/ai set-prompt` — save up to 2,000 characters of behavior instructions.
+- `/ai set-info` — save up to 2,000 characters of approved server facts.
+- `/ai session-time` — choose 1–120 minutes of inactivity before the conversation ends.
+
+Full AI replies require the Railway variable `OPENAI_API_KEY`. Without it, DripCore uses limited built-in responses.
