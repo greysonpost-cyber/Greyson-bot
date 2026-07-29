@@ -149,6 +149,12 @@ function activeTicketRows(claim, votes) {
   return [new ActionRowBuilder().addComponents(...buttons)];
 }
 
+function escalationRow(claimId) {
+  return new ActionRowBuilder().addComponents(
+    new ButtonBuilder().setCustomId(`giveaway_escalate:${claimId}`).setLabel('Escalate').setEmoji('🚨').setStyle(ButtonStyle.Danger)
+  );
+}
+
 function closedTicketRows(claimId) {
   return [new ActionRowBuilder().addComponents(
     new ButtonBuilder().setCustomId(`giveaway_reopen:${claimId}`).setLabel('Reopen').setStyle(ButtonStyle.Success),
@@ -218,6 +224,15 @@ async function updateClaimStatusMessage(guild, claim, status) {
   if (message) db.prepare('UPDATE giveaway_claims SET status_message_id=? WHERE id=?').run(message.id, claim.id);
 }
 
+function safeChannelPart(value, fallback = 'giveaway') {
+  const cleaned = String(value || fallback)
+    .toLowerCase()
+    .replace(/[^a-z0-9-]+/g, '-')
+    .replace(/^-+|-+$/g, '')
+    .replace(/-{2,}/g, '-');
+  return cleaned || fallback;
+}
+
 async function createWinnerTicket(guild, g, winnerId) {
   const member = await guild.members.fetch(winnerId).catch(() => null);
   if (!member) return null;
@@ -244,8 +259,10 @@ async function createWinnerTicket(guild, g, winnerId) {
   ];
   if (staffRole) overwrites.push({ id: staffRole, allow: [PermissionFlagsBits.ViewChannel, PermissionFlagsBits.SendMessages, PermissionFlagsBits.ReadMessageHistory] });
 
+  const prizePart = safeChannelPart(g.prize, `giveaway-${g.id}`);
+  const hostPart = safeChannelPart(host?.displayName || host?.user?.username || `host-${g.hosted_by}`, 'host');
   const channel = await guild.channels.create({
-    name: `gw-${g.id}-${member.user.username}`.toLowerCase().replace(/[^a-z0-9-]/g, '').slice(0, 90),
+    name: `${prizePart}-${hostPart}`.slice(0, 90),
     type: ChannelType.GuildText,
     parent: categoryId || undefined,
     permissionOverwrites: overwrites,
@@ -253,8 +270,15 @@ async function createWinnerTicket(guild, g, winnerId) {
   }).catch(() => null);
   if (!channel) return null;
   db.prepare('UPDATE giveaway_claims SET ticket_channel_id=? WHERE id=?').run(channel.id, claim.id);
-  await channel.send({ content: `<@${winnerId}> <@${g.hosted_by}>`, allowedMentions: { users: [winnerId, g.hosted_by], roles: [] } });
   await refreshTicketMessage(channel, claim.id, false);
+
+  if (!automatic) {
+    const prompt = await channel.send({
+      content: `<@${winnerId}> You won **${g.prize}**! Press **Claim** below to claim your prize before the timer expires.`,
+      allowedMentions: { users: [winnerId], roles: [] }
+    });
+    db.prepare('UPDATE giveaway_claims SET claim_prompt_message_id=? WHERE id=?').run(prompt.id, claim.id);
+  }
   return channel;
 }
 
@@ -379,6 +403,11 @@ async function handleInteraction(i, client) {
     db.prepare('UPDATE giveaway_ticket_votes SET winner_claimed=1 WHERE claim_id=?').run(id);
     db.prepare("UPDATE giveaway_claims SET claimed=1,status='claimed',claimed_at=? WHERE id=?").run(Date.now(), id);
     const updatedClaim = getClaim.get(id);
+    if (updatedClaim.claim_prompt_message_id) {
+      const prompt = await i.channel.messages.fetch(updatedClaim.claim_prompt_message_id).catch(() => null);
+      if (prompt) await prompt.delete().catch(() => {});
+      db.prepare('UPDATE giveaway_claims SET claim_prompt_message_id=NULL WHERE id=?').run(id);
+    }
     await updateClaimStatusMessage(i.guild, updatedClaim, 'claimed');
     await refreshTicketMessage(i.channel, id, false);
     return i.reply({ embeds: [successEmbed('Giveaway Claimed', 'Your claim was saved. Both you and the host must press **Fulfilled** after the prize is delivered.')], ephemeral: true });
@@ -391,12 +420,56 @@ async function handleInteraction(i, client) {
     const field = isWinner ? 'winner_fulfilled' : 'host_fulfilled';
     db.prepare(`UPDATE giveaway_ticket_votes SET ${field}=1 WHERE claim_id=?`).run(id);
     const votes = getVotes.get(id);
+    if (isHost && !votes.winner_fulfilled) {
+      const existing = claim.fulfillment_prompt_message_id
+        ? await i.channel.messages.fetch(claim.fulfillment_prompt_message_id).catch(() => null)
+        : null;
+      if (!existing) {
+        const prompt = await i.channel.send({
+          content: `<@${claim.winner_id}> The host has marked **${getGiveaway.get(claim.giveaway_id)?.prize || 'your prize'}** as sent. Press **Fulfilled** once you receive it, then close the ticket. If you have a problem with the prize or have not received it, press **Escalate** below.`,
+          components: [escalationRow(id)],
+          allowedMentions: { users: [claim.winner_id], roles: [] }
+        });
+        db.prepare('UPDATE giveaway_claims SET fulfillment_prompt_message_id=? WHERE id=?').run(prompt.id, id);
+      }
+    }
     if (votes.winner_fulfilled && votes.host_fulfilled) {
       db.prepare("UPDATE giveaway_claims SET resolved=1,status='fulfilled',fulfilled_at=? WHERE id=?").run(Date.now(), id);
+      const latest = getClaim.get(id);
+      if (latest.fulfillment_prompt_message_id) {
+        const prompt = await i.channel.messages.fetch(latest.fulfillment_prompt_message_id).catch(() => null);
+        if (prompt) await prompt.delete().catch(() => {});
+        db.prepare('UPDATE giveaway_claims SET fulfillment_prompt_message_id=NULL WHERE id=?').run(id);
+      }
     }
     await refreshTicketMessage(i.channel, id, false);
     const bothDone = votes.winner_fulfilled && votes.host_fulfilled;
     return i.reply({ embeds: [successEmbed('Fulfillment Saved', bothDone ? 'Both parties confirmed fulfillment. The ticket can now be closed.' : 'Your confirmation was saved. Waiting for the other party.')], ephemeral: true });
+  }
+
+
+  if (action === 'giveaway_escalate') {
+    if (!isWinner) return i.reply({ embeds: [errorEmbed('Not Allowed', 'Only the giveaway winner can escalate this ticket.')], ephemeral: true });
+    const staffRole = getConfig(i.guild.id, 'giveaway_staff_role');
+    const managerRole = getConfig(i.guild.id, 'giveaway_manager_role');
+    const roleIds = [...new Set([staffRole, managerRole].filter(Boolean))];
+    if (!roleIds.length) {
+      return i.reply({ embeds: [errorEmbed('Escalation Roles Not Configured', 'An admin must set the giveaway staff and/or manager role first.')], ephemeral: true });
+    }
+    for (const roleId of roleIds) {
+      await i.channel.permissionOverwrites.edit(roleId, {
+        ViewChannel: true,
+        SendMessages: true,
+        ReadMessageHistory: true,
+        AttachFiles: true
+      }).catch(() => {});
+    }
+    const mentions = roleIds.map(roleId => `<@&${roleId}>`).join(' ');
+    await i.reply({
+      content: `${mentions} Giveaway issue escalated by <@${claim.winner_id}> for **${getGiveaway.get(claim.giveaway_id)?.prize || 'a prize'}**. Please review this ticket.`,
+      allowedMentions: { roles: roleIds, users: [claim.winner_id] }
+    });
+    return;
   }
 
   if (action === 'giveaway_close') {

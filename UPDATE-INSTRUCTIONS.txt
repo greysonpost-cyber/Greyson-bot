@@ -1,19 +1,18 @@
-DripCore v2.2.6 — Small Giveaway Update
+DripCore v2.2.7 SMALL UPDATE
 
-1. Do NOT delete your repository or data folder.
-2. Upload the included src folder to the root of your GitHub repository.
-3. Replace only these two matching files:
-   src/handlers/giveawayHandler.js
-   src/commands/giveaway/giveaway.js
-4. Redeploy Railway.
-5. Redeploy/register slash commands so the new /giveaway reroll message_link option appears.
+1. Open this ZIP.
+2. Upload the included src folder into the ROOT of your GitHub repository.
+3. Replace the 5 matching files only.
+4. Do NOT upload or replace your data folder or bot.sqlite database.
+5. Let Railway redeploy.
+6. Redeploy slash commands so the new configuration commands appear.
 
-Changes:
-- Claim tickets ping only the actual winner and host, not the configured giveaway staff/host role.
-- The ticket embed displays the actual prize instead of "Giveaway #ID".
-- Winners must display the DRIP server tag. Entries without it are skipped during winner selection/rerolls.
-- Manual reroll is now: /giveaway reroll message_link:<paste giveaway message link>
-- Existing claim, fulfillment, timeout, transcript, leave-entry, and automatic reroll behavior is preserved.
+After deployment, configure escalation roles:
+/giveaway-config staff-role
+/giveaway-config manager-role
 
-Persistent data:
-- This update contains no data folder and no database file, so it will not overwrite saved configurations.
+Configure /giverole access more easily:
+/role-permissions manage granter_role:<role>
+Then select every role that role may give/remove.
+
+This patch expects the previous v2.2.6 giveaway update to already be installed.

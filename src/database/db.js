@@ -80,3 +80,6 @@ ensureColumn('giveaway_claims', 'host_id', 'TEXT');
 ensureColumn('giveaway_claims', 'message_id', 'TEXT');
 // v2.2.3 giveaway channel claim status message.
 ensureColumn('giveaway_claims', 'status_message_id', 'TEXT');
+// v2.2.7 giveaway ticket prompt tracking.
+ensureColumn('giveaway_claims', 'claim_prompt_message_id', 'TEXT');
+ensureColumn('giveaway_claims', 'fulfillment_prompt_message_id', 'TEXT');
