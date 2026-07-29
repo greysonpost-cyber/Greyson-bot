@@ -72,14 +72,9 @@ ensureColumn('giveaway_claims', 'reroll_number', 'INTEGER NOT NULL DEFAULT 0');
 ensureColumn('giveaway_claims', 'claimed_at', 'INTEGER');
 ensureColumn('giveaway_claims', 'fulfilled_at', 'INTEGER');
 ensureColumn('giveaway_claims', 'handled_by', 'TEXT');
+ensureColumn('giveaway_claims', 'reminder_message_id', 'TEXT');
+ensureColumn('giveaway_claims', 'host_fulfilled', 'INTEGER NOT NULL DEFAULT 0');
+ensureColumn('giveaway_claims', 'winner_fulfilled', 'INTEGER NOT NULL DEFAULT 0');
+ensureColumn('giveaway_claims', 'escalated', 'INTEGER NOT NULL DEFAULT 0');
 
 module.exports = db;
-
-// v2.2 giveaway ticket confirmation compatibility.
-ensureColumn('giveaway_claims', 'host_id', 'TEXT');
-ensureColumn('giveaway_claims', 'message_id', 'TEXT');
-// v2.2.3 giveaway channel claim status message.
-ensureColumn('giveaway_claims', 'status_message_id', 'TEXT');
-// v2.2.7 giveaway ticket prompt tracking.
-ensureColumn('giveaway_claims', 'claim_prompt_message_id', 'TEXT');
-ensureColumn('giveaway_claims', 'fulfillment_prompt_message_id', 'TEXT');

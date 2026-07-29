@@ -1,18 +1,17 @@
-DripCore v2.2.7 SMALL UPDATE
+DripCore Giveaway Ticket Permissions + Escalation Update
 
-1. Open this ZIP.
-2. Upload the included src folder into the ROOT of your GitHub repository.
-3. Replace the 5 matching files only.
-4. Do NOT upload or replace your data folder or bot.sqlite database.
-5. Let Railway redeploy.
-6. Redeploy slash commands so the new configuration commands appear.
+1. Upload the included src folder into the root of your GitHub repository.
+2. Replace the matching files. Do NOT replace or upload your data folder or bot.sqlite database.
+3. Redeploy Railway.
+4. Redeploy/register slash commands so /resolved and the new giveaway-config options appear.
+5. Configure roles:
+   /giveaway-config host-role role:@Giveaway Host
+   /giveaway-config manager-role role:@Giveaway Manager
+   /giveaway-config staff-role role:@Staff
 
-After deployment, configure escalation roles:
-/giveaway-config staff-role
-/giveaway-config manager-role
-
-Configure /giverole access more easily:
-/role-permissions manage granter_role:<role>
-Then select every role that role may give/remove.
-
-This patch expects the previous v2.2.6 giveaway update to already be installed.
+Behavior:
+- Giveaway Host role: can view all giveaway tickets but cannot talk unless that member is the actual host.
+- Giveaway Manager and Staff roles: can view and talk in all giveaway tickets.
+- Escalate pings Staff and Giveaway Manager roles and grants talking access.
+- /resolved works only in an escalated giveaway ticket and can be used by Staff, Giveaway Managers, or administrators.
+- Resolving closes winner/host messaging and displays a Delete Ticket button.
