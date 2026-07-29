@@ -27,13 +27,36 @@ const listGrantableRoles = db.prepare(
  *  - no roles have been configured for it (defaults open, admins can lock it down later), OR
  *  - the member has one of the configured roles.
  */
-function canRunCommand(member, commandName) {
+function memberHasConfiguredRole(member, configuredRoleIds) {
+    return member.roles.cache.some(role => configuredRoleIds.includes(role.id));
+}
+
+/**
+ * Checks a command and, when supplied, its parent command permission.
+ * Example: /guild add checks both "guild.add" and "guild".
+ *
+ * Rules:
+ *  - Owner and Administrators always pass.
+ *  - If the subcommand has configured roles, either a matching subcommand role
+ *    OR a matching parent-command role is allowed.
+ *  - If only the parent is configured, the member needs a matching parent role.
+ *  - If neither is configured, the command stays unrestricted.
+ */
+function canRunCommand(member, commandName, parentCommandName = null) {
     if (member.guild.ownerId === member.id) return true;
     if (member.permissions.has(PermissionsBitField.Flags.Administrator)) return true;
 
-    const configured = listCmdPerms.all(member.guild.id, commandName).map(r => r.role_id);
-    if (configured.length === 0) return true; // unrestricted until an admin configures it
-    return member.roles.cache.some(role => configured.includes(role.id));
+    const commandRoles = listCmdPerms.all(member.guild.id, commandName).map(r => r.role_id);
+    const parentRoles = parentCommandName && parentCommandName !== commandName
+        ? listCmdPerms.all(member.guild.id, parentCommandName).map(r => r.role_id)
+        : [];
+
+    const hasCommandRole = memberHasConfiguredRole(member, commandRoles);
+    const hasParentRole = memberHasConfiguredRole(member, parentRoles);
+
+    if (commandRoles.length > 0) return hasCommandRole || hasParentRole;
+    if (parentRoles.length > 0) return hasParentRole;
+    return true;
 }
 
 function addCommandPermission(guildId, commandName, roleId) {

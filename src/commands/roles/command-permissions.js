@@ -7,9 +7,18 @@ const db = require('../../database/db');
 
 const GROUPS = {
   guild: [
-    ['guild', 'All Guild Commands'], ['guild.add', 'Add Guild Member'], ['guild.edit-user', 'Edit Roblox User'],
-    ['guild.set-role', 'Set Guild Role'], ['guild.remove', 'Remove Guild Member'], ['guild.view', 'View Guild Member'],
-    ['guild.list', 'List Guild Members'], ['guild.stats', 'Guild Stats'], ['guild.refresh-list', 'Refresh Live Roster']
+    ['guild', 'All Guild Commands'],
+    ['guild.accept', 'Accept Guild Member'],
+    ['guild.add', 'Add Guild Member'],
+    ['guild.edit-user', 'Edit Roblox Username'],
+    ['guild.set-role', 'Set Guild Role'],
+    ['guild.remove', 'Remove Guild Member'],
+    ['guild.info', 'View Guild Member'],
+    ['guild.list', 'List Guild Members'],
+    ['guild.recruiter', 'Edit Recruiter'],
+    ['guild.notes', 'Edit Guild Notes'],
+    ['guild.inactive', 'Set Active or Inactive'],
+    ['guild.refresh-list', 'Refresh Live Roster']
   ],
   giveaways: [
     ['giveaway', 'All Giveaway Commands'], ['giveaway.start', 'Start Giveaway'], ['giveaway.end', 'End Giveaway'],
@@ -83,7 +92,10 @@ module.exports = {
       return interaction.reply({ embeds: [successEmbed('Permissions Cleared', `All DripCore command permissions were removed from ${role}.`)], ephemeral: true });
     }
     const rows = db.prepare('SELECT command_name FROM command_permissions WHERE guild_id=? AND role_id=? ORDER BY command_name').all(interaction.guild.id, role.id);
-    const text = rows.length ? rows.map(row => `• \`/${row.command_name.replaceAll('.', ' ')}\``).join('\n') : 'No commands are configured for this role.';
+    const labels = new Map(Object.values(GROUPS).flat());
+    const text = rows.length
+      ? rows.map(row => `• **${labels.get(row.command_name) || row.command_name}** — \`/${row.command_name.replaceAll('.', ' ')}\``).join('\n')
+      : 'No commands are configured for this role.';
     return interaction.reply({ embeds: [infoEmbed(`Permissions for ${role.name}`, text)], ephemeral: true });
   },
 

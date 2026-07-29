@@ -1,0 +1,24 @@
+DRIPCORE GUILD PERMISSION FIX
+
+This is an incremental update. Do NOT delete your repository.
+
+Upload the included "src" folder to the ROOT of your GitHub repository.
+When GitHub asks, allow these three existing files to be replaced:
+
+- src/commands/roles/command-permissions.js
+- src/events/interactionCreate.js
+- src/utils/permissions.js
+
+After Railway redeploys:
+1. Run /command-permissions manage
+2. Select the Elders role
+3. Choose Add permissions
+4. Choose Guild
+5. Select "All Guild Commands" (or select individual guild commands)
+6. Run /command-permissions list and select Elders to verify it saved
+
+The update fixes:
+- All Guild Commands now applies to every /guild subcommand.
+- Parent and individual subcommand permissions work together correctly.
+- The menu now contains the real guild subcommands.
+- The permission list shows readable command names.

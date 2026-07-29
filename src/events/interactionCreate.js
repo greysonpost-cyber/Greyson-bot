@@ -1,5 +1,5 @@
 const { errorEmbed } = require('../utils/embeds');
-const { canRunCommand, hasCommandPermissions } = require('../utils/permissions');
+const { canRunCommand } = require('../utils/permissions');
 const ticketHandler = require('../handlers/ticketHandler');
 const reportHandler = require('../handlers/reportHandler');
 const giveawayHandler = require('../handlers/giveawayHandler');
@@ -16,9 +16,7 @@ module.exports = {
 
                 const sub = interaction.options.getSubcommand(false);
                 const permissionKey = sub ? `${interaction.commandName}.${sub}` : interaction.commandName;
-                const keyToCheck = interaction.inGuild() && hasCommandPermissions(interaction.guild.id, permissionKey)
-                    ? permissionKey : interaction.commandName;
-                if (interaction.inGuild() && !canRunCommand(interaction.member, keyToCheck)) {
+                if (interaction.inGuild() && !canRunCommand(interaction.member, permissionKey, interaction.commandName)) {
                     return interaction.reply({
                         embeds: [errorEmbed('No Permission', "You don't have permission to use this command.")],
                         ephemeral: true,
