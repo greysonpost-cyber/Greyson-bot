@@ -55,19 +55,6 @@ module.exports = {
       "UPDATE giveaway_claims SET resolved=1,status='resolved',handled_by=? WHERE id=?"
     ).run(interaction.user.id, claim.id);
 
-    await interaction.channel.permissionOverwrites.edit(claim.winner_id, {
-      SendMessages: false,
-      AddReactions: false,
-      SendMessagesInThreads: false,
-    }).catch(() => {});
-
-    if (claim.host_id) {
-      await interaction.channel.permissionOverwrites.edit(claim.host_id, {
-        SendMessages: false,
-        AddReactions: false,
-        SendMessagesInThreads: false,
-      }).catch(() => {});
-    }
 
     const row = new ActionRowBuilder().addComponents(
       new ButtonBuilder()
@@ -80,7 +67,7 @@ module.exports = {
     return interaction.reply({
       embeds: [successEmbed(
         'Ticket Resolved',
-        `Resolved by <@${interaction.user.id}>. The winner and host can no longer send messages. Staff may delete the ticket below.`
+        `Resolved by <@${interaction.user.id}>. The channel remains open for the winner and host. Staff may delete the ticket below when everything is complete.`
       )],
       components: [row],
     });

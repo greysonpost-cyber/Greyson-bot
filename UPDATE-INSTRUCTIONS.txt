@@ -1,21 +1,24 @@
-DripCore v2.2.11 — Resolved/Ticket Visibility + Command Cleanup
+DripCore v2.2.12 — Booster Bypass, Roblox Entry & Giveaway Manager Update
 
-Replace only these files in your project:
-- src/handlers/giveawayHandler.js
-- src/commands/tickets/resolved.js
-- src/index.js
-- src/deploy-commands.js
+Replace the matching src files in your GitHub repository, then redeploy Railway.
+Do NOT replace or delete your data folder, bot.sqlite database, .env file, or Railway Volume.
 
-This update does NOT include or replace your database, data folder, .env, or saved configuration.
+After deployment, run the slash-command deployment once so Discord receives the new options.
 
-Changes:
-- Fixes /resolved for escalated automatic giveaway tickets.
-- Staff cannot view a new giveaway ticket before it is escalated.
-- When Escalate is pressed, configured Staff and Giveaway Manager roles gain View Channel and Send Messages, and both roles are pinged.
-- /resolved locks the host and winner and displays a Delete Ticket button.
-- Removes all slash commands in src/commands/moderation from loading and Discord registration, including ban, kick, mute, unmute, timeout, warn, unban, purge, history, notes, and channel moderation.
-- Removes the /ai command and disables mention-based AI replies.
-- Old moderation/AI source files can remain in GitHub; the bot now ignores them.
+Configure roles:
+/giveaway-config booster-role role:@Booster
+/giveaway-config staff-role role:@Staff
+/giveaway-config manager-role role:@Giveaway Manager
+/giveaway-config host-role role:@Giveaway Host
 
-IMPORTANT AFTER UPLOAD:
-Redeploy/restart the Railway service. The package start command normally runs deploy-commands.js first. If your setup does not, run `node src/deploy-commands.js` once so Discord removes the old slash commands.
+New behavior:
+- Booster role bypasses required Discord role, guild rank, and DRIP server-tag requirements.
+- Clicking Enter opens a Roblox username form.
+- The Roblox username is stored with the giveaway entry and displayed in the winner ticket.
+- When the winner presses Claim, the host is pinged with the Roblox username.
+- Participants are listed from highest entries to lowest.
+- Giveaway managers/staff can remove an entry with /giveaway remove-entry.
+- Configured Staff and Giveaway Manager roles can use /resolved after escalation.
+- /resolved does not lock the winner or host from talking.
+
+This update contains database migrations only. It does not contain a database file and does not erase saved configuration.

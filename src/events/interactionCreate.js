@@ -3,8 +3,7 @@ const { canRunCommand, hasCommandPermissions } = require('../utils/permissions')
 const ticketHandler = require('../handlers/ticketHandler');
 const reportHandler = require('../handlers/reportHandler');
 const giveawayHandler = require('../handlers/giveawayHandler');
-const commandPermissions = require('../commands/roles/command-permissions');
-const rolePermissions = require('../commands/roles/role-permissions');
+const { getConfig } = require('../utils/config');
 
 module.exports = {
     name: 'interactionCreate',
@@ -19,7 +18,17 @@ module.exports = {
                 const permissionKey = sub ? `${interaction.commandName}.${sub}` : interaction.commandName;
                 const keyToCheck = interaction.inGuild() && hasCommandPermissions(interaction.guild.id, permissionKey)
                     ? permissionKey : interaction.commandName;
-                if (interaction.inGuild() && !canRunCommand(interaction.member, keyToCheck)) {
+                const isConfiguredResolver = interaction.inGuild() && interaction.commandName === 'resolved' && (() => {
+                    const staffRole = getConfig(interaction.guild.id, 'giveaway_staff_role');
+                    const managerRole = getConfig(interaction.guild.id, 'giveaway_manager_role');
+                    return Boolean(
+                        interaction.member.permissions.has('Administrator')
+                        || interaction.member.permissions.has('ManageChannels')
+                        || (staffRole && interaction.member.roles.cache.has(staffRole))
+                        || (managerRole && interaction.member.roles.cache.has(managerRole))
+                    );
+                })();
+                if (interaction.inGuild() && !isConfiguredResolver && !canRunCommand(interaction.member, keyToCheck)) {
                     return interaction.reply({
                         embeds: [errorEmbed('No Permission', "You don't have permission to use this command.")],
                         ephemeral: true,
@@ -43,8 +52,6 @@ module.exports = {
             if (customId.startsWith('ticket_')) return ticketHandler.handleInteraction(interaction, client);
             if (customId.startsWith('report_')) return reportHandler.handleInteraction(interaction, client);
             if (customId.startsWith('giveaway_')) return giveawayHandler.handleInteraction(interaction, client);
-            if (customId.startsWith('permission_commands:')) return commandPermissions.handleInteraction(interaction, client);
-            if (customId.startsWith('role_permissions_manage:')) return rolePermissions.handleInteraction(interaction, client);
         } catch (err) {
             console.error('[interactionCreate] Error:', err);
             const payload = { embeds: [errorEmbed('Something went wrong', 'That action could not be completed. Please try again or contact staff.')], ephemeral: true };

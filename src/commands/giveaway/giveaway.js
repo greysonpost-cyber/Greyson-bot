@@ -1,6 +1,7 @@
-const { SlashCommandBuilder, ChannelType } = require('discord.js');
+const { SlashCommandBuilder, ChannelType, PermissionFlagsBits } = require('discord.js');
 const db = require('../../database/db');
 const { successEmbed, errorEmbed } = require('../../utils/embeds');
+const { getConfig } = require('../../utils/config');
 const { entryButton, giveawayEmbed, endGiveaway, updateLocked, getGiveawayByMessage } = require('../../handlers/giveawayHandler');
 
 const insert = db.prepare(`INSERT INTO giveaways
@@ -17,6 +18,15 @@ function parseDiscordMessageLink(value) {
   const match = /^https?:\/\/(?:www\.)?(?:discord\.com|discordapp\.com)\/channels\/(\d+)\/(\d+)\/(\d+)(?:\?.*)?$/.exec(value.trim());
   if (!match) return null;
   return { guildId: match[1], channelId: match[2], messageId: match[3] };
+}
+
+function isGiveawayManager(interaction) {
+  const managerRole = getConfig(interaction.guild.id, 'giveaway_manager_role');
+  const staffRole = getConfig(interaction.guild.id, 'giveaway_staff_role');
+  return interaction.member.permissions.has(PermissionFlagsBits.Administrator)
+    || interaction.member.permissions.has(PermissionFlagsBits.ManageGuild)
+    || Boolean(managerRole && interaction.member.roles.cache.has(managerRole))
+    || Boolean(staffRole && interaction.member.roles.cache.has(staffRole));
 }
 
 module.exports = {
@@ -44,7 +54,12 @@ module.exports = {
       .setName('lock')
       .setDescription('Lock/unlock entries')
       .addIntegerOption(option => option.setName('giveaway_id').setDescription('ID').setRequired(true))
-      .addBooleanOption(option => option.setName('locked').setDescription('Locked?').setRequired(true))),
+      .addBooleanOption(option => option.setName('locked').setDescription('Locked?').setRequired(true)))
+    .addSubcommand(subcommand => subcommand
+      .setName('remove-entry')
+      .setDescription('Giveaway managers can remove a participant from a giveaway')
+      .addIntegerOption(option => option.setName('giveaway_id').setDescription('Giveaway ID').setRequired(true))
+      .addUserOption(option => option.setName('user').setDescription('Participant to remove').setRequired(true))),
 
   async execute(interaction, client) {
     const subcommand = interaction.options.getSubcommand();
@@ -75,9 +90,31 @@ module.exports = {
       const message = await channel.send({ embeds: [giveawayEmbed(giveaway)], components: [entryButton(giveaway)] });
       db.prepare('UPDATE giveaways SET message_id=? WHERE id=?').run(message.id, giveaway.id);
       return interaction.reply({
-        embeds: [successEmbed('Giveaway Started', `**#${giveaway.id}** posted in ${channel}. Winners must display the **DRIP** server tag.`)],
+        embeds: [successEmbed('Giveaway Started', `**#${giveaway.id}** posted in ${channel}. Entrants must provide their Roblox username.`)],
         ephemeral: true
       });
+    }
+
+    if (subcommand === 'remove-entry') {
+      if (!isGiveawayManager(interaction)) {
+        return interaction.reply({ embeds: [errorEmbed('No Permission', 'Only the configured Giveaway Manager, Staff role, or an administrator can remove participants.')], ephemeral: true });
+      }
+      const giveawayId = interaction.options.getInteger('giveaway_id');
+      const user = interaction.options.getUser('user');
+      const giveaway = get.get(giveawayId);
+      if (!giveaway || giveaway.guild_id !== interaction.guild.id) {
+        return interaction.reply({ embeds: [errorEmbed('Giveaway Not Found')], ephemeral: true });
+      }
+      const result = db.prepare('DELETE FROM giveaway_entries WHERE giveaway_id=? AND user_id=?').run(giveawayId, user.id);
+      if (!result.changes) {
+        return interaction.reply({ embeds: [errorEmbed('Not Entered', `${user} is not entered in giveaway #${giveawayId}.`)], ephemeral: true });
+      }
+      const channel = await interaction.guild.channels.fetch(giveaway.channel_id).catch(() => null);
+      const message = channel?.isTextBased() && giveaway.message_id
+        ? await channel.messages.fetch(giveaway.message_id).catch(() => null)
+        : null;
+      if (message) await message.edit({ embeds: [giveawayEmbed(giveaway)], components: [entryButton(giveaway)] }).catch(() => {});
+      return interaction.reply({ embeds: [successEmbed('Participant Removed', `${user} was removed from giveaway #${giveawayId}.`)], ephemeral: true });
     }
 
     let giveaway;

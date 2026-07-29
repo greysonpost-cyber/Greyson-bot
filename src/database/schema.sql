@@ -107,6 +107,7 @@ CREATE TABLE IF NOT EXISTS giveaway_entries (
     giveaway_id INTEGER NOT NULL,
     user_id TEXT NOT NULL,
     entries INTEGER NOT NULL DEFAULT 1,
+    roblox_username TEXT,
     PRIMARY KEY (giveaway_id, user_id)
 );
 
@@ -135,13 +136,32 @@ CREATE TABLE IF NOT EXISTS giveaway_claims (
     giveaway_id INTEGER NOT NULL,
     guild_id TEXT NOT NULL,
     winner_id TEXT NOT NULL,
+    host_id TEXT,
     ticket_channel_id TEXT,
+    message_id TEXT,
+    status_message_id TEXT,
+    claim_prompt_message_id TEXT,
+    fulfillment_prompt_message_id TEXT,
     deadline_at INTEGER NOT NULL,
     claimed INTEGER NOT NULL DEFAULT 0,
     auto_claimed INTEGER NOT NULL DEFAULT 0,
     resolved INTEGER NOT NULL DEFAULT 0,
+    escalated INTEGER NOT NULL DEFAULT 0,
+    status TEXT NOT NULL DEFAULT 'waiting',
+    claimed_at INTEGER,
+    fulfilled_at INTEGER,
+    handled_by TEXT,
     created_at INTEGER NOT NULL,
     UNIQUE(giveaway_id, winner_id)
+);
+
+CREATE TABLE IF NOT EXISTS giveaway_ticket_votes (
+    claim_id INTEGER PRIMARY KEY,
+    winner_claimed INTEGER NOT NULL DEFAULT 0,
+    winner_fulfilled INTEGER NOT NULL DEFAULT 0,
+    host_fulfilled INTEGER NOT NULL DEFAULT 0,
+    closed INTEGER NOT NULL DEFAULT 0,
+    transcript_sent INTEGER NOT NULL DEFAULT 0
 );
 
 -- Automod tables are initialized before slash-command modules load. This also
@@ -191,14 +211,4 @@ CREATE TABLE IF NOT EXISTS wheel_sessions (
     entries_json TEXT NOT NULL DEFAULT '[]',
     status TEXT NOT NULL DEFAULT 'open',
     created_at INTEGER NOT NULL
-);
-
-CREATE TABLE IF NOT EXISTS giveaway_ticket_votes (
-    claim_id INTEGER PRIMARY KEY,
-    winner_claimed INTEGER NOT NULL DEFAULT 0,
-    host_claimed INTEGER NOT NULL DEFAULT 0,
-    winner_fulfilled INTEGER NOT NULL DEFAULT 0,
-    host_fulfilled INTEGER NOT NULL DEFAULT 0,
-    closed INTEGER NOT NULL DEFAULT 0,
-    transcript_sent INTEGER NOT NULL DEFAULT 0
 );

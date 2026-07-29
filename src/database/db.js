@@ -66,15 +66,38 @@ ensureColumn('automod_rules', 'ignored_channels_json', 'TEXT');
 ensureColumn('automod_rules', 'custom_json', 'TEXT');
 ensureColumn('giveaways', 'bonus_role_id', 'TEXT');
 ensureColumn('giveaways', 'bonus_entries', 'INTEGER DEFAULT 0');
+ensureColumn('giveaway_entries', 'roblox_username', 'TEXT');
 ensureColumn('giveaway_claims', 'status', "TEXT NOT NULL DEFAULT 'waiting'");
 ensureColumn('giveaway_claims', 'claim_deadline', 'INTEGER');
 ensureColumn('giveaway_claims', 'reroll_number', 'INTEGER NOT NULL DEFAULT 0');
 ensureColumn('giveaway_claims', 'claimed_at', 'INTEGER');
 ensureColumn('giveaway_claims', 'fulfilled_at', 'INTEGER');
 ensureColumn('giveaway_claims', 'handled_by', 'TEXT');
-ensureColumn('giveaway_claims', 'reminder_message_id', 'TEXT');
-ensureColumn('giveaway_claims', 'host_fulfilled', 'INTEGER NOT NULL DEFAULT 0');
-ensureColumn('giveaway_claims', 'winner_fulfilled', 'INTEGER NOT NULL DEFAULT 0');
+
+// v2.2 giveaway ticket confirmation compatibility.
+ensureColumn('giveaway_claims', 'host_id', 'TEXT');
+ensureColumn('giveaway_claims', 'message_id', 'TEXT');
+// v2.2.3 giveaway channel claim status message.
+ensureColumn('giveaway_claims', 'status_message_id', 'TEXT');
+// v2.2.7 giveaway ticket prompt tracking.
+ensureColumn('giveaway_claims', 'claim_prompt_message_id', 'TEXT');
+ensureColumn('giveaway_claims', 'fulfillment_prompt_message_id', 'TEXT');
+
 ensureColumn('giveaway_claims', 'escalated', 'INTEGER NOT NULL DEFAULT 0');
+ensureColumn('giveaway_claims', 'resolved', 'INTEGER NOT NULL DEFAULT 0');
+ensureColumn('giveaway_claims', 'ticket_channel_id', 'TEXT');
+ensureColumn('giveaway_claims', 'deadline_at', 'INTEGER');
+ensureColumn('giveaway_claims', 'claimed', 'INTEGER NOT NULL DEFAULT 0');
+ensureColumn('giveaway_claims', 'auto_claimed', 'INTEGER NOT NULL DEFAULT 0');
+ensureColumn('giveaway_claims', 'created_at', 'INTEGER');
+
+db.exec(`CREATE TABLE IF NOT EXISTS giveaway_ticket_votes (
+  claim_id INTEGER PRIMARY KEY,
+  winner_claimed INTEGER NOT NULL DEFAULT 0,
+  winner_fulfilled INTEGER NOT NULL DEFAULT 0,
+  host_fulfilled INTEGER NOT NULL DEFAULT 0,
+  closed INTEGER NOT NULL DEFAULT 0,
+  transcript_sent INTEGER NOT NULL DEFAULT 0
+);`);
 
 module.exports = db;

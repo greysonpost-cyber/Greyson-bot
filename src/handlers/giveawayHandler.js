@@ -1,6 +1,6 @@
 const {
   ActionRowBuilder, ButtonBuilder, ButtonStyle, PermissionFlagsBits,
-  ChannelType, AttachmentBuilder, Routes
+  ChannelType, AttachmentBuilder, Routes, ModalBuilder, TextInputBuilder, TextInputStyle
 } = require('discord.js');
 const db = require('../database/db');
 const { successEmbed, errorEmbed, baseEmbed, infoEmbed } = require('../utils/embeds');
@@ -12,7 +12,7 @@ const getGiveawayByMessage = db.prepare('SELECT * FROM giveaways WHERE message_i
 const updateEnded = db.prepare('UPDATE giveaways SET ended=1,winners_json=? WHERE id=?');
 const updateLocked = db.prepare('UPDATE giveaways SET locked=? WHERE id=?');
 const dueGiveaways = db.prepare('SELECT * FROM giveaways WHERE ended=0 AND ends_at<=?');
-const upsertEntry = db.prepare('INSERT INTO giveaway_entries (giveaway_id,user_id,entries) VALUES (?,?,?) ON CONFLICT(giveaway_id,user_id) DO UPDATE SET entries=excluded.entries');
+const upsertEntry = db.prepare('INSERT INTO giveaway_entries (giveaway_id,user_id,entries,roblox_username) VALUES (?,?,?,?) ON CONFLICT(giveaway_id,user_id) DO UPDATE SET entries=excluded.entries,roblox_username=excluded.roblox_username');
 const deleteEntry = db.prepare('DELETE FROM giveaway_entries WHERE giveaway_id=? AND user_id=?');
 const getEntry = db.prepare('SELECT * FROM giveaway_entries WHERE giveaway_id=? AND user_id=?');
 const allEntries = db.prepare('SELECT * FROM giveaway_entries WHERE giveaway_id=?');
@@ -25,7 +25,7 @@ const REQUIRED_SERVER_TAG = 'DRIP';
 
 function entryButton(g) {
   return new ActionRowBuilder().addComponents(
-    new ButtonBuilder().setCustomId(`giveaway_enter:${g.id}`).setLabel('🎉 0').setStyle(ButtonStyle.Primary),
+    new ButtonBuilder().setCustomId(`giveaway_enter:${g.id}`).setLabel(`🎉 ${countEntries.get(g.id).c}`).setStyle(ButtonStyle.Primary),
     new ButtonBuilder().setCustomId(`giveaway_participants:${g.id}`).setLabel('Participants').setEmoji('👥').setStyle(ButtonStyle.Secondary)
   );
 }
@@ -77,9 +77,12 @@ function giveawayEmbed(g) {
     embed.addFields({ name: '✨ Bonus Entries', value: 'No bonus-entry roles are configured.', inline: false });
   }
 
+  const boosterRole = getConfig(g.guild_id, 'giveaway_booster_role');
   embed.addFields({
     name: '🏷️ Winner Requirement',
-    value: `Winners must display the **${REQUIRED_SERVER_TAG}** server tag when the giveaway ends.`,
+    value: boosterRole
+      ? `Winners must display the **${REQUIRED_SERVER_TAG}** server tag. Members with <@&${boosterRole}> bypass all role, guild-rank, and tag requirements.`
+      : `Winners must display the **${REQUIRED_SERVER_TAG}** server tag when the giveaway ends.`,
     inline: false
   });
 
@@ -92,6 +95,11 @@ function memberEntries(member) {
     if (member.roles.cache.has(role.role_id)) total += role.extra_entries;
   }
   return total;
+}
+
+function isBooster(member) {
+  const boosterRole = getConfig(member.guild.id, 'giveaway_booster_role');
+  return Boolean(boosterRole && member.roles.cache.has(boosterRole));
 }
 
 async function userHasRequiredServerTag(client, userId) {
@@ -115,7 +123,8 @@ async function pickWinners(g, client) {
   const entries = allEntries.all(g.id);
   const eligible = [];
   for (const entry of entries) {
-    if (await userHasRequiredServerTag(client, entry.user_id)) eligible.push(entry);
+    const member = await client.guilds.cache.get(g.guild_id)?.members.fetch(entry.user_id).catch(() => null);
+    if ((member && isBooster(member)) || await userHasRequiredServerTag(client, entry.user_id)) eligible.push(entry);
   }
 
   const pool = [];
@@ -152,6 +161,7 @@ function voteText(claim, votes) {
   return [
     `**Prize:** ${giveaway?.prize || `Giveaway #${claim.giveaway_id}`}`,
     `**Winner:** <@${claim.winner_id}>`,
+    `**Roblox Username:** ${db.prepare('SELECT roblox_username FROM giveaway_entries WHERE giveaway_id=? AND user_id=?').get(claim.giveaway_id, claim.winner_id)?.roblox_username || 'Not provided'}`,
     `**Host:** <@${claim.host_id}>`,
     '',
     `**Claimed by winner:** ${winnerClaim}`,
@@ -397,28 +407,59 @@ async function handleInteraction(i, client) {
     const g = getGiveaway.get(id);
     if (!g) return i.reply({ embeds: [errorEmbed('Giveaway Not Found')], ephemeral: true });
     if (g.ended || g.locked) return i.reply({ embeds: [errorEmbed(g.ended ? 'Giveaway Ended' : 'Giveaway Locked')], ephemeral: true });
-    if (g.required_role_id && !i.member.roles.cache.has(g.required_role_id)) return i.reply({ embeds: [errorEmbed('Not Eligible', `You need <@&${g.required_role_id}>.`)], ephemeral: true });
-    if (g.required_guild_rank) {
-      const row = db.prepare('SELECT guild_rank FROM guild_members WHERE guild_id=? AND discord_id=? AND active=1').get(i.guild.id, i.user.id);
-      if (!row || row.guild_rank.toLowerCase() !== g.required_guild_rank.toLowerCase()) return i.reply({ embeds: [errorEmbed('Not Eligible', `You need the guild role **${g.required_guild_rank}**.`)], ephemeral: true });
-    }
     const existing = getEntry.get(id, i.user.id);
     if (existing) {
       return i.reply({
-        embeds: [infoEmbed('Already Entered', `You currently have **${existing.entries}** entries. Press the button below to leave this giveaway.`)],
+        embeds: [infoEmbed('Already Entered', `You currently have **${existing.entries}** entries with Roblox username **${existing.roblox_username || 'Not provided'}**. Press below to leave.`)],
         components: [leaveConfirmButton(id)],
         ephemeral: true
       });
     }
+    const modal = new ModalBuilder()
+      .setCustomId(`giveaway_roblox_submit:${id}`)
+      .setTitle('Enter Giveaway');
+    const usernameInput = new TextInputBuilder()
+      .setCustomId('roblox_username')
+      .setLabel('Your Roblox username')
+      .setPlaceholder('Type your exact Roblox username')
+      .setMinLength(3)
+      .setMaxLength(20)
+      .setRequired(true)
+      .setStyle(TextInputStyle.Short);
+    modal.addComponents(new ActionRowBuilder().addComponents(usernameInput));
+    return i.showModal(modal);
+  }
+
+  if (action === 'giveaway_roblox_submit') {
+    const g = getGiveaway.get(id);
+    if (!g) return i.reply({ embeds: [errorEmbed('Giveaway Not Found')], ephemeral: true });
+    if (g.ended || g.locked) return i.reply({ embeds: [errorEmbed(g.ended ? 'Giveaway Ended' : 'Giveaway Locked')], ephemeral: true });
+    const bypass = isBooster(i.member);
+    if (!bypass && g.required_role_id && !i.member.roles.cache.has(g.required_role_id)) {
+      return i.reply({ embeds: [errorEmbed('Not Eligible', `You need <@&${g.required_role_id}>.`)], ephemeral: true });
+    }
+    if (!bypass && g.required_guild_rank) {
+      const row = db.prepare('SELECT guild_rank FROM guild_members WHERE guild_id=? AND discord_id=? AND active=1').get(i.guild.id, i.user.id);
+      if (!row || row.guild_rank.toLowerCase() !== g.required_guild_rank.toLowerCase()) {
+        return i.reply({ embeds: [errorEmbed('Not Eligible', `You need the guild role **${g.required_guild_rank}**.`)], ephemeral: true });
+      }
+    }
+    const robloxUsername = i.fields.getTextInputValue('roblox_username').trim();
+    if (!/^[A-Za-z0-9_]{3,20}$/.test(robloxUsername)) {
+      return i.reply({ embeds: [errorEmbed('Invalid Roblox Username', 'Use 3–20 letters, numbers, or underscores only.')], ephemeral: true });
+    }
     const entries = memberEntries(i.member);
-    upsertEntry.run(id, i.user.id, entries);
+    upsertEntry.run(id, i.user.id, entries, robloxUsername);
     const total = countEntries.get(id).c;
-    const message = i.message;
-    await message.edit({ embeds: [giveawayEmbed(g)], components: [new ActionRowBuilder().addComponents(
-      new ButtonBuilder().setCustomId(`giveaway_enter:${g.id}`).setLabel(`🎉 ${total}`).setStyle(ButtonStyle.Primary),
-      new ButtonBuilder().setCustomId(`giveaway_participants:${g.id}`).setLabel('Participants').setEmoji('👥').setStyle(ButtonStyle.Secondary)
-    )] }).catch(() => {});
-    return i.reply({ embeds: [successEmbed('Entered!', `You received **${entries}** entr${entries === 1 ? 'y' : 'ies'} based on your roles.`)], ephemeral: true });
+    const channel = await i.guild.channels.fetch(g.channel_id).catch(() => null);
+    const message = channel?.isTextBased() && g.message_id ? await channel.messages.fetch(g.message_id).catch(() => null) : null;
+    if (message) {
+      await message.edit({ embeds: [giveawayEmbed(g)], components: [new ActionRowBuilder().addComponents(
+        new ButtonBuilder().setCustomId(`giveaway_enter:${g.id}`).setLabel(`🎉 ${total}`).setStyle(ButtonStyle.Primary),
+        new ButtonBuilder().setCustomId(`giveaway_participants:${g.id}`).setLabel('Participants').setEmoji('👥').setStyle(ButtonStyle.Secondary)
+      )] }).catch(() => {});
+    }
+    return i.reply({ embeds: [successEmbed('Entered!', `Roblox username: **${robloxUsername}**\nYou received **${entries}** entr${entries === 1 ? 'y' : 'ies'}${bypass ? ' and your booster bypass is active.' : '.'}`)], ephemeral: true });
   }
 
   if (action === 'giveaway_leave_confirm') {
@@ -479,7 +520,12 @@ async function handleInteraction(i, client) {
     }
     await updateClaimStatusMessage(i.guild, updatedClaim, 'claimed');
     await refreshTicketMessage(i.channel, id, false);
-    return i.reply({ embeds: [successEmbed('Giveaway Claimed', 'Your claim was saved. Both you and the host must press **Fulfilled** after the prize is delivered.')], ephemeral: true });
+    const robloxUsername = db.prepare('SELECT roblox_username FROM giveaway_entries WHERE giveaway_id=? AND user_id=?').get(claim.giveaway_id, claim.winner_id)?.roblox_username || 'Not provided';
+    await i.channel.send({
+      content: `<@${claim.host_id}> The winner has claimed **${getGiveaway.get(claim.giveaway_id)?.prize || 'the prize'}**. Their Roblox username is **${robloxUsername}**.`,
+      allowedMentions: { users: [claim.host_id], roles: [] }
+    }).catch(() => {});
+    return i.reply({ embeds: [successEmbed('Giveaway Claimed', 'Your claim was saved and the host was pinged with your Roblox username.')], ephemeral: true });
   }
 
   if (action === 'giveaway_fulfilled') {
