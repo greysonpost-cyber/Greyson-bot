@@ -1,19 +1,21 @@
-DripCore v2.2.9 — Giveaway Display + Empty Ticket Fix
+DripCore v2.2.11 — Resolved/Ticket Visibility + Command Cleanup
 
-CHANGED FILE
+Replace only these files in your project:
 - src/handlers/giveawayHandler.js
+- src/commands/tickets/resolved.js
+- src/index.js
+- src/deploy-commands.js
 
-INSTALL
-1. Back up your project/database first.
-2. Upload the included src folder and replace the matching file.
-3. Do NOT replace your data folder, bot.sqlite, .env, or Railway volume.
-4. Redeploy the bot.
+This update does NOT include or replace your database, data folder, .env, or saved configuration.
 
-FIXES
-- Restores a detailed giveaway embed with prize, exact end time, relative timer,
-  winner count, entry count, host, requirements, bonus-entry roles, and DRIP tag rule.
-- Ensures newly created giveaway tickets receive a claim panel and winner ping.
-- Adds a fallback ticket message if the normal claim panel fails to send.
-- Auto-claim tickets now also receive a visible winner notification.
+Changes:
+- Fixes /resolved for escalated automatic giveaway tickets.
+- Staff cannot view a new giveaway ticket before it is escalated.
+- When Escalate is pressed, configured Staff and Giveaway Manager roles gain View Channel and Send Messages, and both roles are pinged.
+- /resolved locks the host and winner and displays a Delete Ticket button.
+- Removes all slash commands in src/commands/moderation from loading and Discord registration, including ban, kick, mute, unmute, timeout, warn, unban, purge, history, notes, and channel moderation.
+- Removes the /ai command and disables mention-based AI replies.
+- Old moderation/AI source files can remain in GitHub; the bot now ignores them.
 
-This patch does not contain configuration or database files.
+IMPORTANT AFTER UPLOAD:
+Redeploy/restart the Railway service. The package start command normally runs deploy-commands.js first. If your setup does not, run `node src/deploy-commands.js` once so Discord removes the old slash commands.

@@ -286,9 +286,9 @@ async function createWinnerTicket(guild, g, winnerId) {
     { id: guild.members.me.id, allow: [PermissionFlagsBits.ViewChannel, PermissionFlagsBits.SendMessages, PermissionFlagsBits.ReadMessageHistory, PermissionFlagsBits.ManageChannels] }
   ];
 
-  // Staff groups can watch all giveaway tickets, but they cannot speak unless
-  // the winner presses Escalate. The actual host and winner still have normal access.
-  const readOnlyRoleIds = [...new Set([hostRole, managerRole, staffRole].filter(Boolean))];
+  // The configured giveaway-host and giveaway-manager roles can view tickets read-only.
+  // The staff role has no ticket access until the winner presses Escalate.
+  const readOnlyRoleIds = [...new Set([hostRole, managerRole].filter(Boolean))];
   for (const roleId of readOnlyRoleIds) {
     overwrites.push({
       id: roleId,
@@ -458,7 +458,12 @@ async function handleInteraction(i, client) {
   if (!claim) return i.reply({ embeds: [errorEmbed('Claim Not Found')], ephemeral: true });
   const isWinner = i.user.id === claim.winner_id;
   const isHost = i.user.id === claim.host_id;
-  const isStaff = i.member.permissions.has(PermissionFlagsBits.ManageChannels) || i.member.permissions.has(PermissionFlagsBits.Administrator);
+  const configuredStaffRole = getConfig(i.guild.id, 'giveaway_staff_role');
+  const configuredManagerRole = getConfig(i.guild.id, 'giveaway_manager_role');
+  const isStaff = i.member.permissions.has(PermissionFlagsBits.ManageChannels)
+    || i.member.permissions.has(PermissionFlagsBits.Administrator)
+    || Boolean(configuredStaffRole && i.member.roles.cache.has(configuredStaffRole))
+    || Boolean(configuredManagerRole && i.member.roles.cache.has(configuredManagerRole));
 
   if (action === 'giveaway_claim') {
     if (!isWinner) return i.reply({ embeds: [errorEmbed('Not Allowed', 'Only the giveaway winner can claim this prize.')], ephemeral: true });
@@ -530,6 +535,7 @@ async function handleInteraction(i, client) {
         SendMessagesInThreads: true
       }).catch(() => {});
     }
+    db.prepare('UPDATE giveaway_claims SET escalated=1 WHERE id=?').run(id);
     const mentions = roleIds.map(roleId => `<@&${roleId}>`).join(' ');
     await i.reply({
       content: `${mentions} Giveaway issue escalated by <@${claim.winner_id}> for **${getGiveaway.get(claim.giveaway_id)?.prize || 'a prize'}**. Please review this ticket.`,

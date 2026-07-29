@@ -9,7 +9,15 @@ require('./database/db');
 
 const commands = [];
 const commandsRoot = path.join(__dirname, 'commands');
+// Keep these command folders out of Discord registration even if their old
+// source files still exist in the repository. Redeploying replaces the guild's
+// command list, so the removed commands disappear from Discord.
+const disabledCommandFolders = new Set(['ai', 'moderation']);
 for (const folder of fs.readdirSync(commandsRoot)) {
+  if (disabledCommandFolders.has(folder)) {
+    console.log(`[deploy] Skipping disabled command folder: ${folder}`);
+    continue;
+  }
   const folderPath = path.join(commandsRoot, folder);
   if (!fs.statSync(folderPath).isDirectory()) continue;
   for (const file of fs.readdirSync(folderPath).filter(f => f.endsWith('.js'))) {
