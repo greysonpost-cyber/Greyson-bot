@@ -1,6 +1,6 @@
 const {
   ActionRowBuilder, ButtonBuilder, ButtonStyle, PermissionFlagsBits,
-  ChannelType, AttachmentBuilder
+  ChannelType, AttachmentBuilder, Routes
 } = require('discord.js');
 const db = require('../database/db');
 const { successEmbed, errorEmbed, baseEmbed, infoEmbed } = require('../utils/embeds');
@@ -21,6 +21,7 @@ const dueClaims = db.prepare('SELECT * FROM giveaway_claims WHERE claimed=0 AND 
 const getClaim = db.prepare('SELECT * FROM giveaway_claims WHERE id=?');
 const getVotes = db.prepare('SELECT * FROM giveaway_ticket_votes WHERE claim_id=?');
 const ensureVotes = db.prepare('INSERT OR IGNORE INTO giveaway_ticket_votes (claim_id) VALUES (?)');
+const REQUIRED_SERVER_TAG = 'DRIP';
 
 function entryButton(g) {
   return new ActionRowBuilder().addComponents(
@@ -67,10 +68,35 @@ function memberEntries(member) {
   return total;
 }
 
-async function pickWinners(g) {
+async function userHasRequiredServerTag(client, userId) {
+  try {
+    // Fetch raw user data so this also works on discord.js versions that do not
+    // expose User#primaryGuild yet.
+    const user = await client.rest.get(Routes.user(userId));
+    const primaryGuild = user?.primary_guild;
+    return Boolean(
+      primaryGuild &&
+      primaryGuild.identity_enabled !== false &&
+      String(primaryGuild.tag || '').toUpperCase() === REQUIRED_SERVER_TAG
+    );
+  } catch (error) {
+    console.error(`[giveaway tag check] Could not check ${userId}:`, error);
+    return false;
+  }
+}
+
+async function pickWinners(g, client) {
   const entries = allEntries.all(g.id);
+  const eligible = [];
+  for (const entry of entries) {
+    if (await userHasRequiredServerTag(client, entry.user_id)) eligible.push(entry);
+  }
+
   const pool = [];
-  for (const entry of entries) for (let n = 0; n < entry.entries; n += 1) pool.push(entry.user_id);
+  for (const entry of eligible) {
+    for (let n = 0; n < entry.entries; n += 1) pool.push(entry.user_id);
+  }
+
   const winners = new Set();
   const unique = new Set(pool);
   while (winners.size < g.winner_count && winners.size < unique.size && pool.length) {
@@ -93,11 +119,12 @@ function autoClaim(member) {
 }
 
 function voteText(claim, votes) {
+  const giveaway = getGiveaway.get(claim.giveaway_id);
   const winnerClaim = claim.claimed ? '✅' : '⬜';
   const winnerFulfilled = votes.winner_fulfilled ? '✅' : '⬜';
   const hostFulfilled = votes.host_fulfilled ? '✅' : '⬜';
   return [
-    `**Prize:** Giveaway #${claim.giveaway_id}`,
+    `**Prize:** ${giveaway?.prize || `Giveaway #${claim.giveaway_id}`}`,
     `**Winner:** <@${claim.winner_id}>`,
     `**Host:** <@${claim.host_id}>`,
     '',
@@ -226,7 +253,7 @@ async function createWinnerTicket(guild, g, winnerId) {
   }).catch(() => null);
   if (!channel) return null;
   db.prepare('UPDATE giveaway_claims SET ticket_channel_id=? WHERE id=?').run(channel.id, claim.id);
-  await channel.send({ content: `<@${winnerId}> <@${g.hosted_by}>${staffRole ? ` <@&${staffRole}>` : ''}` });
+  await channel.send({ content: `<@${winnerId}> <@${g.hosted_by}>`, allowedMentions: { users: [winnerId, g.hosted_by], roles: [] } });
   await refreshTicketMessage(channel, claim.id, false);
   return channel;
 }
@@ -237,9 +264,9 @@ async function endGiveaway(client, id, { reroll = false } = {}) {
   const guild = await client.guilds.fetch(g.guild_id).catch(() => null);
   if (!guild) return null;
   const channel = await guild.channels.fetch(g.channel_id).catch(() => null);
-  const winners = await pickWinners(g);
+  const winners = await pickWinners(g, client);
   updateEnded.run(JSON.stringify(winners), id);
-  const text = winners.length ? winners.map(userId => `<@${userId}>`).join(', ') : 'No valid entries.';
+  const text = winners.length ? winners.map(userId => `<@${userId}>`).join(', ') : `No eligible entries with the **${REQUIRED_SERVER_TAG}** server tag.`;
   if (channel) {
     await channel.send({ embeds: [successEmbed(reroll ? 'Giveaway Rerolled!' : 'Giveaway Ended!', `**${g.prize}**\n**Winner(s):** ${text}\nAutomatic claim tickets were created.`)] });
     if (g.message_id) {
@@ -266,7 +293,7 @@ async function rerollExpired(client, claim) {
       setTimeout(() => channel.delete().catch(() => {}), 3_000);
     }
   }
-  const winners = await pickWinners({ ...old, winner_count: 1 });
+  const winners = await pickWinners({ ...old, winner_count: 1 }, client);
   if (!winners.length || !guild) return;
   const winner = winners[0];
   const channel = await guild.channels.fetch(old.channel_id).catch(() => null);

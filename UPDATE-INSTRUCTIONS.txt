@@ -1,13 +1,19 @@
-DRIPCORE v2.2.5 — SMALL GIVEAWAY CLAIM RESTORE UPDATE
+DripCore v2.2.6 — Small Giveaway Update
 
-This patch contains only one changed file.
+1. Do NOT delete your repository or data folder.
+2. Upload the included src folder to the root of your GitHub repository.
+3. Replace only these two matching files:
+   src/handlers/giveawayHandler.js
+   src/commands/giveaway/giveaway.js
+4. Redeploy Railway.
+5. Redeploy/register slash commands so the new /giveaway reroll message_link option appears.
 
-Upload the included src folder into the root of your GitHub repository and replace the matching file.
-Then redeploy Railway.
+Changes:
+- Claim tickets ping only the actual winner and host, not the configured giveaway staff/host role.
+- The ticket embed displays the actual prize instead of "Giveaway #ID".
+- Winners must display the DRIP server tag. Entries without it are skipped during winner selection/rerolls.
+- Manual reroll is now: /giveaway reroll message_link:<paste giveaway message link>
+- Existing claim, fulfillment, timeout, transcript, leave-entry, and automatic reroll behavior is preserved.
 
-Fixes:
-- Restores winner Claim button and winner-only claiming.
-- Restores host + winner Fulfilled confirmations.
-- Restores Close, Reopen, Delete, transcript, auto-delete, and automatic reroll behavior.
-- Keeps the new second-click Leave Giveaway option.
-- Keeps WAITING ON CLAIM and CLAIMED status messages in the giveaway channel.
+Persistent data:
+- This update contains no data folder and no database file, so it will not overwrite saved configurations.
