@@ -24,4 +24,53 @@ if (gm.includes('roblox_id')) {
     ALTER TABLE guild_members_new RENAME TO guild_members;`);
 }
 
+
+// Compatibility migrations for repositories that still contain command files
+// from an older DripCore/Greyson Bot build. SQLite cannot add multiple columns
+// with IF NOT EXISTS, so inspect each table before altering it.
+function tableExists(table) {
+  return Boolean(db.prepare("SELECT 1 FROM sqlite_master WHERE type='table' AND name=?").get(table));
+}
+function ensureColumn(table, name, definition) {
+  if (!tableExists(table)) return;
+  const names = columns(table);
+  if (!names.includes(name)) db.exec(`ALTER TABLE ${table} ADD COLUMN ${name} ${definition}`);
+}
+
+// Older embed, preset, and wheel commands prepare statements as soon as the
+// module loads, so their tables must exist before slash commands are imported.
+db.exec(`
+CREATE TABLE IF NOT EXISTS saved_embeds (
+  id INTEGER PRIMARY KEY AUTOINCREMENT, guild_id TEXT NOT NULL, name TEXT NOT NULL,
+  embed_json TEXT NOT NULL, created_by TEXT NOT NULL, created_at INTEGER NOT NULL,
+  UNIQUE(guild_id, name)
+);
+CREATE TABLE IF NOT EXISTS giveaway_presets (
+  id INTEGER PRIMARY KEY AUTOINCREMENT, guild_id TEXT NOT NULL, name TEXT NOT NULL,
+  settings_json TEXT NOT NULL, created_by TEXT NOT NULL, created_at INTEGER NOT NULL,
+  UNIQUE(guild_id, name)
+);
+CREATE TABLE IF NOT EXISTS wheel_sessions (
+  id INTEGER PRIMARY KEY AUTOINCREMENT, guild_id TEXT NOT NULL, channel_id TEXT NOT NULL,
+  host_id TEXT NOT NULL, message_id TEXT, entries_json TEXT NOT NULL DEFAULT '[]',
+  status TEXT NOT NULL DEFAULT 'open', created_at INTEGER NOT NULL
+);
+`);
+
+// Columns used by older command versions. Keeping them nullable/defaulted makes
+// upgrades safe without restoring removed options in the current slash commands.
+ensureColumn('automod_rules', 'threshold', 'INTEGER');
+ensureColumn('automod_rules', 'duration_ms', 'INTEGER');
+ensureColumn('automod_rules', 'ignored_roles_json', 'TEXT');
+ensureColumn('automod_rules', 'ignored_channels_json', 'TEXT');
+ensureColumn('automod_rules', 'custom_json', 'TEXT');
+ensureColumn('giveaways', 'bonus_role_id', 'TEXT');
+ensureColumn('giveaways', 'bonus_entries', 'INTEGER DEFAULT 0');
+ensureColumn('giveaway_claims', 'status', "TEXT NOT NULL DEFAULT 'waiting'");
+ensureColumn('giveaway_claims', 'claim_deadline', 'INTEGER');
+ensureColumn('giveaway_claims', 'reroll_number', 'INTEGER NOT NULL DEFAULT 0');
+ensureColumn('giveaway_claims', 'claimed_at', 'INTEGER');
+ensureColumn('giveaway_claims', 'fulfilled_at', 'INTEGER');
+ensureColumn('giveaway_claims', 'handled_by', 'TEXT');
+
 module.exports = db;

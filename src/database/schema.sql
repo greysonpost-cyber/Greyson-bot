@@ -159,3 +159,36 @@ CREATE TABLE IF NOT EXISTS automod_rules (
 
 CREATE INDEX IF NOT EXISTS idx_automod_rules_guild
 ON automod_rules (guild_id, enabled);
+
+-- Legacy compatibility tables. These allow older command files left in a
+-- repository to load safely while users replace the project files.
+CREATE TABLE IF NOT EXISTS saved_embeds (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    guild_id TEXT NOT NULL,
+    name TEXT NOT NULL,
+    embed_json TEXT NOT NULL,
+    created_by TEXT NOT NULL,
+    created_at INTEGER NOT NULL,
+    UNIQUE(guild_id, name)
+);
+
+CREATE TABLE IF NOT EXISTS giveaway_presets (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    guild_id TEXT NOT NULL,
+    name TEXT NOT NULL,
+    settings_json TEXT NOT NULL,
+    created_by TEXT NOT NULL,
+    created_at INTEGER NOT NULL,
+    UNIQUE(guild_id, name)
+);
+
+CREATE TABLE IF NOT EXISTS wheel_sessions (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    guild_id TEXT NOT NULL,
+    channel_id TEXT NOT NULL,
+    host_id TEXT NOT NULL,
+    message_id TEXT,
+    entries_json TEXT NOT NULL DEFAULT '[]',
+    status TEXT NOT NULL DEFAULT 'open',
+    created_at INTEGER NOT NULL
+);
