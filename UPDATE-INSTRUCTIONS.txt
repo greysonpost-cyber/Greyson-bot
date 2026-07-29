@@ -1,0 +1,13 @@
+DripCore small update patch
+
+Upload the included src folder into the ROOT of your repository.
+Choose Replace/Overwrite when asked.
+Do not delete the rest of your project.
+
+Changed files:
+- src/commands/applications/staffapplication.js
+- src/commands/tickets/delete.js
+- src/handlers/giveawayHandler.js
+- src/utils/config.js
+
+After uploading, redeploy Railway. Slash commands must be redeployed/re-registered for /staffapplication and /delete to appear.
