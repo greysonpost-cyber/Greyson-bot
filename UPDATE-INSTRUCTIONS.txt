@@ -1,17 +1,19 @@
-DripCore Giveaway Ticket Permissions + Escalation Update
+DripCore v2.2.9 — Giveaway Display + Empty Ticket Fix
 
-1. Upload the included src folder into the root of your GitHub repository.
-2. Replace the matching files. Do NOT replace or upload your data folder or bot.sqlite database.
-3. Redeploy Railway.
-4. Redeploy/register slash commands so /resolved and the new giveaway-config options appear.
-5. Configure roles:
-   /giveaway-config host-role role:@Giveaway Host
-   /giveaway-config manager-role role:@Giveaway Manager
-   /giveaway-config staff-role role:@Staff
+CHANGED FILE
+- src/handlers/giveawayHandler.js
 
-Behavior:
-- Giveaway Host role: can view all giveaway tickets but cannot talk unless that member is the actual host.
-- Giveaway Manager and Staff roles: can view and talk in all giveaway tickets.
-- Escalate pings Staff and Giveaway Manager roles and grants talking access.
-- /resolved works only in an escalated giveaway ticket and can be used by Staff, Giveaway Managers, or administrators.
-- Resolving closes winner/host messaging and displays a Delete Ticket button.
+INSTALL
+1. Back up your project/database first.
+2. Upload the included src folder and replace the matching file.
+3. Do NOT replace your data folder, bot.sqlite, .env, or Railway volume.
+4. Redeploy the bot.
+
+FIXES
+- Restores a detailed giveaway embed with prize, exact end time, relative timer,
+  winner count, entry count, host, requirements, bonus-entry roles, and DRIP tag rule.
+- Ensures newly created giveaway tickets receive a claim panel and winner ping.
+- Adds a fallback ticket message if the normal claim panel fails to send.
+- Auto-claim tickets now also receive a visible winner notification.
+
+This patch does not contain configuration or database files.
