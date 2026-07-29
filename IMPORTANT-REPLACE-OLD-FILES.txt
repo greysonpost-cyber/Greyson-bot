@@ -1,0 +1,9 @@
+IMPORTANT: Replace the repository contents instead of merging this folder over the old bot.
+
+Old command files left in GitHub can still be loaded even when they are not included in this update. The safest upload method is:
+1. Keep your Railway environment variables.
+2. Delete the old repository files/folders except .git if working locally.
+3. Upload every file and folder from this ZIP to the repository root.
+4. Commit the deletion and the new files together.
+
+Version 2.0.1 also initializes SQLite before loading command modules and restores a compatible automod command/table, fixing the "no such table: automod_rules" deployment crash.

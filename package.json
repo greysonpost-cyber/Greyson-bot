@@ -1,12 +1,13 @@
 {
   "name": "dripcore-discord-bot",
-  "version": "2.0.0",
+  "version": "2.0.1",
   "description": "DripCore all-in-one Discord bot with guild rosters, giveaways, permissions, reports, moderation, and AI guidance.",
   "main": "src/index.js",
   "type": "commonjs",
   "scripts": {
     "start": "node src/index.js",
-    "deploy": "node src/deploy-commands.js"
+    "deploy": "node src/deploy-commands.js",
+    "validate": "node -e \"require('./src/database/db'); const fs=require('fs'),path=require('path'); for(const dir of fs.readdirSync('./src/commands')){for(const f of fs.readdirSync(path.join('./src/commands',dir)).filter(x=>x.endsWith('.js'))){const c=require(path.resolve('./src/commands',dir,f)); c.data.toJSON(); console.log('OK',dir+'/'+f)}}\""
   },
   "dependencies": {
     "better-sqlite3": "^11.3.0",

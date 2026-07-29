@@ -3,6 +3,10 @@ const fs = require('fs');
 const path = require('path');
 const { REST, Routes } = require('discord.js');
 
+// Initialize the database and run schema migrations before command modules are loaded.
+// Some command files prepare SQL statements during require(), so this must happen first.
+require('./database/db');
+
 const commands = [];
 const commandsRoot = path.join(__dirname, 'commands');
 for (const folder of fs.readdirSync(commandsRoot)) {

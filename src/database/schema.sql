@@ -143,3 +143,19 @@ CREATE TABLE IF NOT EXISTS giveaway_claims (
     created_at INTEGER NOT NULL,
     UNIQUE(giveaway_id, winner_id)
 );
+
+-- Automod tables are initialized before slash-command modules load. This also
+-- keeps upgrades compatible with earlier DripCore/Greyson Bot automod files.
+CREATE TABLE IF NOT EXISTS automod_rules (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    guild_id TEXT NOT NULL,
+    rule_type TEXT NOT NULL DEFAULT 'blocked_phrase',
+    pattern TEXT NOT NULL,
+    action TEXT NOT NULL DEFAULT 'delete',
+    enabled INTEGER NOT NULL DEFAULT 1,
+    created_by TEXT,
+    created_at INTEGER NOT NULL DEFAULT 0
+);
+
+CREATE INDEX IF NOT EXISTS idx_automod_rules_guild
+ON automod_rules (guild_id, enabled);
