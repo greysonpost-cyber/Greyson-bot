@@ -1,13 +1,13 @@
-DripCore small update patch
+DRIPCORE v2.2.5 — SMALL GIVEAWAY CLAIM RESTORE UPDATE
 
-Upload the included src folder into the ROOT of your repository.
-Choose Replace/Overwrite when asked.
-Do not delete the rest of your project.
+This patch contains only one changed file.
 
-Changed files:
-- src/commands/applications/staffapplication.js
-- src/commands/tickets/delete.js
-- src/handlers/giveawayHandler.js
-- src/utils/config.js
+Upload the included src folder into the root of your GitHub repository and replace the matching file.
+Then redeploy Railway.
 
-After uploading, redeploy Railway. Slash commands must be redeployed/re-registered for /staffapplication and /delete to appear.
+Fixes:
+- Restores winner Claim button and winner-only claiming.
+- Restores host + winner Fulfilled confirmations.
+- Restores Close, Reopen, Delete, transcript, auto-delete, and automatic reroll behavior.
+- Keeps the new second-click Leave Giveaway option.
+- Keeps WAITING ON CLAIM and CLAIMED status messages in the giveaway channel.
