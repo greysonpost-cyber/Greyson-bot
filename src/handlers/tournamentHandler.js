@@ -1,0 +1,317 @@
+const {
+  ActionRowBuilder,
+  AttachmentBuilder,
+  ButtonBuilder,
+  ButtonStyle,
+  EmbedBuilder,
+  ModalBuilder,
+  PermissionFlagsBits,
+  TextInputBuilder,
+  TextInputStyle,
+} = require('discord.js');
+const db = require('../database/db');
+const { getConfig, setConfig } = require('../utils/config');
+
+const GAMES = [
+  '🔪 Murder Mystery 2',
+  '👗 Dress to Impress',
+  '📸 Best Screenshot',
+  '🎭 Avatar Creator Challenge',
+  '👑 Grand Finale',
+];
+
+const q = {
+  active: db.prepare(`SELECT * FROM tournaments WHERE guild_id=? AND status!='deleted' ORDER BY id DESC LIMIT 1`),
+  byId: db.prepare(`SELECT * FROM tournaments WHERE id=?`),
+  players: db.prepare(`SELECT * FROM tournament_players WHERE tournament_id=? AND active=1 ORDER BY (contribution_points + round1_points + round2_points + round3_points + round4_points) DESC, joined_at ASC`),
+  player: db.prepare(`SELECT * FROM tournament_players WHERE tournament_id=? AND user_id=?`),
+  count: db.prepare(`SELECT COUNT(*) c FROM tournament_players WHERE tournament_id=? AND active=1`),
+};
+
+function score(p) {
+  return Number(p.contribution_points || 0) + Number(p.round1_points || 0) + Number(p.round2_points || 0) + Number(p.round3_points || 0) + Number(p.round4_points || 0);
+}
+
+function canManage(interaction) {
+  if (!interaction.inGuild()) return false;
+  if (interaction.member.permissions.has(PermissionFlagsBits.Administrator) || interaction.member.permissions.has(PermissionFlagsBits.ManageGuild)) return true;
+  const roleId = getConfig(interaction.guild.id, 'tournament_manager_role');
+  return Boolean(roleId && interaction.member.roles.cache.has(roleId));
+}
+
+function safeName(value) {
+  return String(value || 'Player').replace(/[\r\n\t]/g, ' ').slice(0, 28);
+}
+
+function stageLabel(t) {
+  if (t.status === 'registration') return 'Registration Open';
+  if (t.status === 'finished') return 'Finished';
+  return `Round ${t.current_round}: ${GAMES[Math.max(0, t.current_round - 1)]}`;
+}
+
+function panelEmbed(t, players) {
+  const top = players.slice(0, 10).map((p, i) => `**${i + 1}.** <@${p.user_id}> — **${score(p)} pts**`).join('\n') || 'No players yet.';
+  const games = GAMES.map((g, i) => `${t.current_round > i + 1 || t.status === 'finished' ? '✅' : t.current_round === i + 1 ? '▶️' : '▫️'} ${g}`).join('\n');
+  return new EmbedBuilder()
+    .setColor(0x5865F2)
+    .setTitle(`🏆 ${t.name}`)
+    .setDescription(`**Prize:** ${t.prize}\n**Status:** ${stageLabel(t)}\n**Players:** ${players.length}/${t.max_players}`)
+    .addFields(
+      { name: 'Tournament Games', value: games, inline: true },
+      { name: 'Current Standings', value: top, inline: true },
+      { name: 'Contribution Bonus', value: 'Members who contribute to the prize pool can start with **0–5 extra points**. Staff records the amount with `/tournament contribution`.' },
+    )
+    .setFooter({ text: 'DripCore Tournament System' })
+    .setTimestamp();
+}
+
+function panelComponents(t) {
+  if (t.status !== 'registration') return [];
+  return [new ActionRowBuilder().addComponents(
+    new ButtonBuilder().setCustomId(`tournament_join_${t.id}`).setLabel('Join Tournament').setEmoji('🏆').setStyle(ButtonStyle.Success),
+    new ButtonBuilder().setCustomId(`tournament_leave_${t.id}`).setLabel('Leave').setStyle(ButtonStyle.Secondary),
+  )];
+}
+
+async function renderBoard(guild, t, players) {
+  const width = 1400;
+  const shown = players.slice(0, 32);
+  const isMatchups = t.current_round === 1 && t.status === 'active';
+  const height = Math.max(820, 370 + (isMatchups ? Math.ceil(shown.length / 4) * 112 : shown.length * 42));
+  const esc = value => String(value ?? '').replace(/[&<>"']/g, ch => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&apos;' }[ch]));
+  const rows = [];
+
+  const stages = ['MM2', 'DTI', 'Screenshot', 'Avatar', 'Final'];
+  const stageBoxes = stages.map((name, i) => {
+    const x = 60 + i * 265;
+    const fill = t.current_round > i + 1 || t.status === 'finished' ? '#40d98b' : t.current_round === i + 1 ? '#7b79ff' : '#ffffff24';
+    return `<rect x="${x}" y="195" width="230" height="62" rx="16" fill="${fill}"/><text x="${x + 20}" y="234" class="stage">${esc(name)}</text>`;
+  }).join('');
+
+  if (isMatchups) {
+    const shuffled = [...shown].sort((a, b) => String(a.seed_key).localeCompare(String(b.seed_key)));
+    shuffled.forEach((p, index) => {
+      const pair = Math.floor(index / 2);
+      const col = pair % 2;
+      const row = Math.floor(pair / 2);
+      const x = 60 + col * 670;
+      const y = 360 + row * 112 + (index % 2) * 44;
+      const fill = index % 2 === 0 ? '#7b79ff55' : '#ffffff1f';
+      rows.push(`<rect x="${x}" y="${y}" width="610" height="36" rx="10" fill="${fill}"/><text x="${x + 14}" y="${y + 25}" class="row">${index % 2 === 0 ? 'A' : 'B'}  ${esc(safeName(p.display_name))}  (${score(p)} pts)</text>`);
+    });
+  } else {
+    shown.forEach((p, i) => {
+      const y = 360 + i * 42;
+      const fill = i < 2 ? '#ffd75c38' : i % 2 ? '#ffffff14' : '#ffffff20';
+      rows.push(`<rect x="60" y="${y}" width="1280" height="34" rx="9" fill="${fill}"/><text x="78" y="${y + 24}" class="${i < 2 ? 'toprow' : 'row'}">${i + 1}. ${esc(safeName(p.display_name))}</text><text x="650" y="${y + 24}" class="subrow">${p.roblox_username ? '@' + esc(safeName(p.roblox_username)) : ''}</text><text x="1160" y="${y + 24}" class="${i < 2 ? 'toprow' : 'row'}">${score(p)} pts</text>`);
+    });
+  }
+
+  const svg = `<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" width="${width}" height="${height}" viewBox="0 0 ${width} ${height}">
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#11162f"/><stop offset="0.55" stop-color="#212057"/><stop offset="1" stop-color="#471d65"/></linearGradient>
+    <pattern id="grid" width="70" height="70" patternUnits="userSpaceOnUse"><path d="M 70 0 L 0 0 0 70" fill="none" stroke="#ffffff" stroke-opacity="0.07" stroke-width="1"/></pattern>
+    <style>.title{font:700 52px Arial,sans-serif;fill:#fff}.meta{font:26px Arial,sans-serif;fill:#c7ccff}.heading{font:700 30px Arial,sans-serif;fill:#fff}.stage{font:700 22px Arial,sans-serif;fill:#fff}.row{font:20px Arial,sans-serif;fill:#fff}.toprow{font:700 20px Arial,sans-serif;fill:#fff}.subrow{font:17px Arial,sans-serif;fill:#bdc5ff}</style>
+  </defs>
+  <rect width="100%" height="100%" fill="url(#bg)"/><rect width="100%" height="100%" fill="url(#grid)"/>
+  <text x="60" y="78" class="title">${esc(safeName(t.name))}</text>
+  <text x="62" y="122" class="meta">${esc(stageLabel(t))}</text>
+  <text x="62" y="158" class="meta">Prize: ${esc(safeName(t.prize))}</text>
+  ${stageBoxes}
+  <text x="60" y="320" class="heading">${isMatchups ? 'Round 1 Matchups' : 'Live Leaderboard'}</text>
+  ${rows.join('\n')}
+</svg>`;
+  return new AttachmentBuilder(Buffer.from(svg, 'utf8'), { name: `tournament-${t.id}-board.svg`, description: `${t.name} tournament board` });
+}
+async function updatePanel(client, t) {
+  if (!t.channel_id || !t.message_id) return;
+  const guild = client.guilds.cache.get(t.guild_id);
+  const channel = guild?.channels.cache.get(t.channel_id);
+  if (!channel?.isTextBased()) return;
+  const players = q.players.all(t.id);
+  const msg = await channel.messages.fetch(t.message_id).catch(() => null);
+  if (!msg) return;
+  await msg.edit({ embeds: [panelEmbed(t, players)], components: panelComponents(t) }).catch(() => {});
+}
+
+async function handleCommand(interaction, client) {
+  const sub = interaction.options.getSubcommand();
+  const publicSubs = new Set(['leaderboard', 'participants']);
+  if (!publicSubs.has(sub) && !canManage(interaction)) {
+    return interaction.reply({ content: '❌ Only tournament managers or server administrators can use this.', ephemeral: true });
+  }
+  const guildId = interaction.guild.id;
+  let t = q.active.get(guildId);
+
+  if (sub === 'config') {
+    const manager = interaction.options.getRole('manager_role');
+    const channel = interaction.options.getChannel('announcement_channel');
+    const participant = interaction.options.getRole('participant_role');
+    if (manager) setConfig(guildId, 'tournament_manager_role', manager.id);
+    if (channel) setConfig(guildId, 'tournament_announcement_channel', channel.id);
+    if (participant) setConfig(guildId, 'tournament_participant_role', participant.id);
+    return interaction.reply({ content: `✅ Tournament configuration updated.${manager ? `\nManager: ${manager}` : ''}${channel ? `\nAnnouncements: ${channel}` : ''}${participant ? `\nParticipant role: ${participant}` : ''}`, ephemeral: true });
+  }
+
+  if (sub === 'create') {
+    if (t && !['finished', 'deleted'].includes(t.status)) return interaction.reply({ content: '❌ An active tournament already exists. End or delete it first.', ephemeral: true });
+    const channel = interaction.options.getChannel('channel') || interaction.guild.channels.cache.get(getConfig(guildId, 'tournament_announcement_channel')) || interaction.channel;
+    const role = interaction.options.getRole('participant_role');
+    const result = db.prepare(`INSERT INTO tournaments (guild_id,name,prize,max_players,status,current_round,channel_id,participant_role_id,created_by,created_at) VALUES (?,?,?,?, 'registration',0,?,?,?,?)`).run(
+      guildId,
+      interaction.options.getString('name'),
+      interaction.options.getString('prize'),
+      interaction.options.getInteger('max_players'),
+      channel.id,
+      role?.id || getConfig(guildId, 'tournament_participant_role'),
+      interaction.user.id,
+      Date.now(),
+    );
+    t = q.byId.get(result.lastInsertRowid);
+    const msg = await channel.send({ embeds: [panelEmbed(t, [])], components: panelComponents(t) });
+    db.prepare(`UPDATE tournaments SET message_id=? WHERE id=?`).run(msg.id, t.id);
+    return interaction.reply({ content: `✅ Tournament created in ${channel}.`, ephemeral: true });
+  }
+
+  if (!t) return interaction.reply({ content: '❌ There is no tournament configured.', ephemeral: true });
+
+  if (sub === 'start') {
+    const count = q.count.get(t.id).c;
+    if (count < 2) return interaction.reply({ content: '❌ At least 2 players must register.', ephemeral: true });
+    db.prepare(`UPDATE tournaments SET status='active', current_round=1, started_at=? WHERE id=?`).run(Date.now(), t.id);
+    db.prepare(`UPDATE tournament_players SET seed_key=lower(hex(randomblob(16))) WHERE tournament_id=?`).run(t.id);
+    t = q.byId.get(t.id);
+    const players = q.players.all(t.id);
+    const board = await renderBoard(interaction.guild, t, players);
+    await interaction.reply({ content: `🏆 **${t.name} has started!**\nRound 1: ${GAMES[0]}`, files: [board] });
+    return updatePanel(client, t);
+  }
+
+  if (sub === 'award') {
+    if (t.status !== 'active' || t.current_round < 1 || t.current_round > 4) return interaction.reply({ content: '❌ Points can only be awarded during rounds 1–4.', ephemeral: true });
+    const user = interaction.options.getUser('user');
+    const p = q.player.get(t.id, user.id);
+    if (!p || !p.active) return interaction.reply({ content: '❌ That user is not an active participant.', ephemeral: true });
+    const points = interaction.options.getInteger('points');
+    const col = `round${t.current_round}_points`;
+    db.prepare(`UPDATE tournament_players SET ${col}=? WHERE tournament_id=? AND user_id=?`).run(points, t.id, user.id);
+    const note = interaction.options.getString('note');
+    db.prepare(`INSERT INTO tournament_awards (tournament_id,user_id,round_number,points,note,awarded_by,created_at) VALUES (?,?,?,?,?,?,?)`).run(t.id, user.id, t.current_round, points, note, interaction.user.id, Date.now());
+    await interaction.reply({ content: `✅ ${user} now has **${points} points** for Round ${t.current_round}.`, ephemeral: true });
+    return updatePanel(client, q.byId.get(t.id));
+  }
+
+  if (sub === 'contribution') {
+    const user = interaction.options.getUser('user');
+    const p = q.player.get(t.id, user.id);
+    if (!p || !p.active) return interaction.reply({ content: '❌ That user is not an active participant.', ephemeral: true });
+    const points = Math.min(5, interaction.options.getInteger('points'));
+    db.prepare(`UPDATE tournament_players SET contribution_points=? WHERE tournament_id=? AND user_id=?`).run(points, t.id, user.id);
+    await interaction.reply({ content: `✅ ${user} will start with **${points}/5 contribution bonus points**.`, ephemeral: true });
+    return updatePanel(client, q.byId.get(t.id));
+  }
+
+  if (sub === 'next-round') {
+    if (t.status !== 'active') return interaction.reply({ content: '❌ The tournament is not active.', ephemeral: true });
+    if (t.current_round >= 5) return interaction.reply({ content: '❌ You are already at the Grand Finale.', ephemeral: true });
+    const next = t.current_round + 1;
+    db.prepare(`UPDATE tournaments SET current_round=? WHERE id=?`).run(next, t.id);
+    t = q.byId.get(t.id);
+    const players = q.players.all(t.id);
+    if (next === 5) {
+      const finalists = players.slice(0, 2);
+      db.prepare(`UPDATE tournaments SET finalist1_id=?, finalist2_id=? WHERE id=?`).run(finalists[0]?.user_id || null, finalists[1]?.user_id || null, t.id);
+      t = q.byId.get(t.id);
+      const board = await renderBoard(interaction.guild, t, players);
+      await interaction.reply({ content: `👑 **GRAND FINALE**\n<@${t.finalist1_id}> vs <@${t.finalist2_id}>\nThe final challenge can be announced later.`, files: [board] });
+    } else {
+      const board = await renderBoard(interaction.guild, t, players);
+      await interaction.reply({ content: `▶️ Round ${next} has started: **${GAMES[next - 1]}**`, files: [board] });
+    }
+    return updatePanel(client, t);
+  }
+
+  if (sub === 'leaderboard') {
+    const players = q.players.all(t.id);
+    const board = await renderBoard(interaction.guild, t, players);
+    return interaction.reply({ embeds: [panelEmbed(t, players)], files: [board] });
+  }
+
+  if (sub === 'participants') {
+    const players = q.players.all(t.id);
+    const lines = players.map((p, i) => `${i + 1}. <@${p.user_id}> — Roblox: **${p.roblox_username || 'Not set'}** — ${score(p)} pts`);
+    return interaction.reply({ content: lines.length ? lines.join('\n').slice(0, 1900) : 'No registered participants.', ephemeral: true });
+  }
+
+  if (sub === 'remove') {
+    const user = interaction.options.getUser('user');
+    db.prepare(`UPDATE tournament_players SET active=0 WHERE tournament_id=? AND user_id=?`).run(t.id, user.id);
+    const member = await interaction.guild.members.fetch(user.id).catch(() => null);
+    if (member && t.participant_role_id) await member.roles.remove(t.participant_role_id).catch(() => {});
+    await interaction.reply({ content: `✅ Removed ${user} from the tournament.`, ephemeral: true });
+    return updatePanel(client, t);
+  }
+
+  if (sub === 'end') {
+    const winner = interaction.options.getUser('winner');
+    const players = q.players.all(t.id);
+    const finalistIds = [t.finalist1_id, t.finalist2_id].filter(Boolean);
+    if (finalistIds.length === 2 && !finalistIds.includes(winner.id)) return interaction.reply({ content: '❌ The selected winner must be one of the two Grand Finalists.', ephemeral: true });
+    const championId = winner.id;
+    db.prepare(`UPDATE tournaments SET status='finished', champion_id=?, ended_at=? WHERE id=?`).run(championId || null, Date.now(), t.id);
+    t = q.byId.get(t.id);
+    const board = await renderBoard(interaction.guild, t, players);
+    await interaction.reply({ content: championId ? `🏆 **${t.name} is complete!**\nChampion: <@${championId}>` : `🏆 **${t.name} is complete!**`, files: [board] });
+    return updatePanel(client, t);
+  }
+
+  if (sub === 'delete') {
+    if (t.channel_id && t.message_id) {
+      const ch = interaction.guild.channels.cache.get(t.channel_id);
+      const msg = await ch?.messages.fetch(t.message_id).catch(() => null);
+      await msg?.delete().catch(() => {});
+    }
+    db.prepare(`UPDATE tournaments SET status='deleted' WHERE id=?`).run(t.id);
+    return interaction.reply({ content: '✅ Tournament deleted. Existing database history was kept.', ephemeral: true });
+  }
+}
+
+async function handleInteraction(interaction, client) {
+  const parts = interaction.customId.split('_');
+  const action = parts[1];
+  const id = Number(parts[2]);
+  const t = q.byId.get(id);
+  if (!t || t.status === 'deleted') return interaction.reply({ content: '❌ This tournament is no longer available.', ephemeral: true });
+
+  if (action === 'join') {
+    if (t.status !== 'registration') return interaction.reply({ content: '❌ Registration is closed.', ephemeral: true });
+    if (q.count.get(t.id).c >= t.max_players) return interaction.reply({ content: '❌ The tournament is full.', ephemeral: true });
+    const existing = q.player.get(t.id, interaction.user.id);
+    if (existing?.active) return interaction.reply({ content: 'You are already registered.', ephemeral: true });
+    const modal = new ModalBuilder().setCustomId(`tournament_joinmodal_${t.id}`).setTitle('Tournament Registration');
+    const roblox = new TextInputBuilder().setCustomId('roblox_username').setLabel('Your Roblox username').setStyle(TextInputStyle.Short).setRequired(true).setMinLength(3).setMaxLength(20);
+    modal.addComponents(new ActionRowBuilder().addComponents(roblox));
+    return interaction.showModal(modal);
+  }
+
+  if (action === 'joinmodal') {
+    const username = interaction.fields.getTextInputValue('roblox_username').trim();
+    db.prepare(`INSERT INTO tournament_players (tournament_id,user_id,display_name,roblox_username,joined_at,active) VALUES (?,?,?,?,?,1)
+      ON CONFLICT(tournament_id,user_id) DO UPDATE SET display_name=excluded.display_name,roblox_username=excluded.roblox_username,active=1`).run(
+      t.id, interaction.user.id, interaction.member.displayName || interaction.user.username, username, Date.now(),
+    );
+    if (t.participant_role_id) await interaction.member.roles.add(t.participant_role_id).catch(() => {});
+    await interaction.reply({ content: `✅ You joined **${t.name}** as Roblox user **${username}**.`, ephemeral: true });
+    return updatePanel(client, q.byId.get(t.id));
+  }
+
+  if (action === 'leave') {
+    db.prepare(`UPDATE tournament_players SET active=0 WHERE tournament_id=? AND user_id=?`).run(t.id, interaction.user.id);
+    if (t.participant_role_id) await interaction.member.roles.remove(t.participant_role_id).catch(() => {});
+    await interaction.reply({ content: `You left **${t.name}**.`, ephemeral: true });
+    return updatePanel(client, q.byId.get(t.id));
+  }
+}
+
+module.exports = { handleCommand, handleInteraction };

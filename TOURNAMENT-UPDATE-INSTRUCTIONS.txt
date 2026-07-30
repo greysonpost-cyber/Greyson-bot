@@ -1,0 +1,40 @@
+DRIPCORE v2.3.0 — TOURNAMENT SYSTEM
+
+UPLOAD:
+1. Extract this ZIP.
+2. Upload the included package.json, package-lock.json, and src folder into the ROOT of your GitHub repository.
+3. Replace matching files when asked.
+4. Do NOT replace or delete your data folder, bot.sqlite, .env, or Railway Volume.
+5. Commit and let Railway redeploy. Railway should run npm install and then register the new slash command.
+
+FIRST-TIME CONFIGURATION:
+/tournament config manager_role:@Tournament Manager announcement_channel:#tournament participant_role:@Tournament Participant
+
+CREATE:
+/tournament create name:DRIP Championship prize:<your prize> max_players:64 channel:#tournament participant_role:@Tournament Participant
+
+WORKFLOW:
+1. Members press Join Tournament and enter their Roblox username.
+2. Record prize contributors (maximum 5 starting points):
+   /tournament contribution user:@Member points:1-5
+3. Start Round 1:
+   /tournament start
+4. Record each player's result for the current round:
+   /tournament award user:@Member points:<0-25> note:<result>
+5. Advance:
+   /tournament next-round
+6. After Round 4, /tournament next-round automatically selects the top two finalists.
+7. Use /tournament leaderboard anytime to upload the current custom bracket/leaderboard picture (SVG).
+8. Finish with /tournament end.
+
+ROUNDS:
+1. Murder Mystery 2
+2. Dress to Impress
+3. Best Screenshot
+4. Avatar Creator Challenge
+5. Grand Finale between the top two
+
+PERMISSIONS:
+- Administrators and Manage Server members can manage automatically.
+- The configured Tournament Manager role can also create, score, remove, advance, and end.
+- /tournament leaderboard and /tournament participants are public unless restricted through your existing /command-permissions system.

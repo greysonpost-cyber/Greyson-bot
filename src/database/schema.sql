@@ -212,3 +212,51 @@ CREATE TABLE IF NOT EXISTS wheel_sessions (
     status TEXT NOT NULL DEFAULT 'open',
     created_at INTEGER NOT NULL
 );
+
+-- DripCore tournament system
+CREATE TABLE IF NOT EXISTS tournaments (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  guild_id TEXT NOT NULL,
+  name TEXT NOT NULL,
+  prize TEXT NOT NULL,
+  max_players INTEGER NOT NULL DEFAULT 64,
+  status TEXT NOT NULL DEFAULT 'registration',
+  current_round INTEGER NOT NULL DEFAULT 0,
+  channel_id TEXT,
+  message_id TEXT,
+  participant_role_id TEXT,
+  finalist1_id TEXT,
+  finalist2_id TEXT,
+  champion_id TEXT,
+  created_by TEXT NOT NULL,
+  created_at INTEGER NOT NULL,
+  started_at INTEGER,
+  ended_at INTEGER
+);
+
+CREATE TABLE IF NOT EXISTS tournament_players (
+  tournament_id INTEGER NOT NULL,
+  user_id TEXT NOT NULL,
+  display_name TEXT NOT NULL,
+  roblox_username TEXT,
+  contribution_points INTEGER NOT NULL DEFAULT 0 CHECK(contribution_points BETWEEN 0 AND 5),
+  round1_points INTEGER NOT NULL DEFAULT 0,
+  round2_points INTEGER NOT NULL DEFAULT 0,
+  round3_points INTEGER NOT NULL DEFAULT 0,
+  round4_points INTEGER NOT NULL DEFAULT 0,
+  seed_key TEXT,
+  active INTEGER NOT NULL DEFAULT 1,
+  joined_at INTEGER NOT NULL,
+  PRIMARY KEY (tournament_id, user_id)
+);
+
+CREATE TABLE IF NOT EXISTS tournament_awards (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  tournament_id INTEGER NOT NULL,
+  user_id TEXT NOT NULL,
+  round_number INTEGER NOT NULL,
+  points INTEGER NOT NULL,
+  note TEXT,
+  awarded_by TEXT NOT NULL,
+  created_at INTEGER NOT NULL
+);
