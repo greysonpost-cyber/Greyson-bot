@@ -304,3 +304,21 @@ CREATE TABLE IF NOT EXISTS tournament_mm2_results (
   notes TEXT,
   created_at INTEGER NOT NULL
 );
+
+-- DripCore v3 economy and collectible artifacts
+CREATE TABLE IF NOT EXISTS token_balances (guild_id TEXT NOT NULL,user_id TEXT NOT NULL,balance INTEGER NOT NULL DEFAULT 0,updated_at INTEGER NOT NULL,PRIMARY KEY(guild_id,user_id));
+CREATE TABLE IF NOT EXISTS token_ledger (id INTEGER PRIMARY KEY AUTOINCREMENT,guild_id TEXT NOT NULL,user_id TEXT NOT NULL,amount INTEGER NOT NULL,reason TEXT,actor_id TEXT,created_at INTEGER NOT NULL);
+CREATE TABLE IF NOT EXISTS booster_rewards (guild_id TEXT NOT NULL,user_id TEXT NOT NULL,boost_started_at INTEGER NOT NULL,last_weekly_at INTEGER NOT NULL,active INTEGER NOT NULL DEFAULT 1,PRIMARY KEY(guild_id,user_id));
+CREATE TABLE IF NOT EXISTS daily_claims (guild_id TEXT NOT NULL,user_id TEXT NOT NULL,claim_key TEXT NOT NULL,last_claim_at INTEGER NOT NULL,streak INTEGER NOT NULL DEFAULT 1,PRIMARY KEY(guild_id,user_id,claim_key));
+CREATE TABLE IF NOT EXISTS minigame_rewards (guild_id TEXT NOT NULL,user_id TEXT NOT NULL,day_key TEXT NOT NULL,tokens_earned INTEGER NOT NULL DEFAULT 0,wins INTEGER NOT NULL DEFAULT 0,PRIMARY KEY(guild_id,user_id,day_key));
+CREATE TABLE IF NOT EXISTS artifact_types (id INTEGER PRIMARY KEY AUTOINCREMENT,guild_id TEXT NOT NULL,name TEXT NOT NULL,collection_name TEXT NOT NULL,discord_role_id TEXT,theme TEXT,passive TEXT,rarity TEXT NOT NULL DEFAULT 'Limited',max_copies INTEGER NOT NULL,base_price INTEGER NOT NULL,created_by TEXT NOT NULL,created_at INTEGER NOT NULL,UNIQUE(guild_id,name));
+CREATE TABLE IF NOT EXISTS artifacts (id INTEGER PRIMARY KEY AUTOINCREMENT,type_id INTEGER NOT NULL,copy_number INTEGER NOT NULL,owner_id TEXT,obtained_at INTEGER,origin TEXT,trade_count INTEGER NOT NULL DEFAULT 0,locked_trade_id INTEGER,UNIQUE(type_id,copy_number));
+CREATE TABLE IF NOT EXISTS artifact_history (id INTEGER PRIMARY KEY AUTOINCREMENT,artifact_id INTEGER NOT NULL,from_user_id TEXT,to_user_id TEXT,action TEXT NOT NULL,reason TEXT,transaction_id TEXT,created_at INTEGER NOT NULL);
+CREATE TABLE IF NOT EXISTS shop_stock (guild_id TEXT NOT NULL,artifact_type_id INTEGER NOT NULL,price INTEGER NOT NULL,stock INTEGER NOT NULL,channel_id TEXT,message_id TEXT,updated_at INTEGER NOT NULL,PRIMARY KEY(guild_id,artifact_type_id));
+CREATE TABLE IF NOT EXISTS marketplace_listings (id INTEGER PRIMARY KEY AUTOINCREMENT,guild_id TEXT NOT NULL,artifact_id INTEGER NOT NULL,seller_id TEXT NOT NULL,price INTEGER NOT NULL,status TEXT NOT NULL DEFAULT 'active',channel_id TEXT,message_id TEXT,created_at INTEGER NOT NULL,sold_at INTEGER,buyer_id TEXT);
+CREATE TABLE IF NOT EXISTS trades (id INTEGER PRIMARY KEY AUTOINCREMENT,guild_id TEXT NOT NULL,user_a TEXT NOT NULL,user_b TEXT NOT NULL,status TEXT NOT NULL DEFAULT 'open',ready_a INTEGER NOT NULL DEFAULT 0,ready_b INTEGER NOT NULL DEFAULT 0,confirm_a INTEGER NOT NULL DEFAULT 0,confirm_b INTEGER NOT NULL DEFAULT 0,locked_at INTEGER,channel_id TEXT,message_id TEXT,created_at INTEGER NOT NULL,completed_at INTEGER,transaction_id TEXT);
+CREATE TABLE IF NOT EXISTS trade_items (trade_id INTEGER NOT NULL,side TEXT NOT NULL,item_type TEXT NOT NULL,item_id INTEGER NOT NULL DEFAULT 0,amount INTEGER NOT NULL DEFAULT 0,PRIMARY KEY(trade_id,side,item_type,item_id));
+CREATE TABLE IF NOT EXISTS collection_preferences (guild_id TEXT NOT NULL,user_id TEXT NOT NULL,artifact_id INTEGER NOT NULL,accepting_offers INTEGER NOT NULL DEFAULT 0,PRIMARY KEY(guild_id,user_id,artifact_id));
+CREATE TABLE IF NOT EXISTS economy_config (guild_id TEXT NOT NULL,key TEXT NOT NULL,value TEXT,PRIMARY KEY(guild_id,key));
+CREATE INDEX IF NOT EXISTS idx_artifacts_owner ON artifacts(owner_id);
+CREATE INDEX IF NOT EXISTS idx_market_active ON marketplace_listings(guild_id,status);

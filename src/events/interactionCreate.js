@@ -3,6 +3,8 @@ const { canRunCommand, hasCommandPermissions } = require('../utils/permissions')
 const ticketHandler = require('../handlers/ticketHandler');
 const reportHandler = require('../handlers/reportHandler');
 const giveawayHandler = require('../handlers/giveawayHandler');
+const economyHandler = require('../handlers/economyHandler');
+const economy = require('../services/economy');
 const tournamentHandler = require('../handlers/tournamentHandler');
 const { getConfig } = require('../utils/config');
 
@@ -53,6 +55,13 @@ module.exports = {
             if (customId.startsWith('ticket_')) return ticketHandler.handleInteraction(interaction, client);
             if (customId.startsWith('report_')) return reportHandler.handleInteraction(interaction, client);
             if (customId.startsWith('giveaway_')) return giveawayHandler.handleInteraction(interaction, client);
+            if (customId.startsWith('econ_')) return economyHandler.handle(interaction, client);
+            if (customId.startsWith('minireact:')) {
+                const parts = customId.split(':');
+                const reward = economy.rewardGame(interaction.guild.id, interaction.user.id, 2);
+                await interaction.update({ content: `⚡ ${interaction.user} was fastest! ${reward ? `They earned **${reward} PT**.` : `They reached today's minigame cap.`}`, components: [] });
+                return;
+            }
             if (customId.startsWith('tournament_')) return tournamentHandler.handleInteraction(interaction, client);
         } catch (err) {
             console.error('[interactionCreate] Error:', err);

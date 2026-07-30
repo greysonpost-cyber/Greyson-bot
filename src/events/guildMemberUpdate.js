@@ -1,8 +1,10 @@
 const { sendLog } = require('../utils/logger');
+const boosterRewards = require('../services/boosterRewards');
 
 module.exports = {
     name: 'guildMemberUpdate',
     async execute(oldMember, newMember) {
+        await boosterRewards.memberUpdate(oldMember, newMember).catch(console.error);
         // Nickname changes
         if (oldMember.nickname !== newMember.nickname) {
             await sendLog(newMember.guild, 'log_channel_member', {

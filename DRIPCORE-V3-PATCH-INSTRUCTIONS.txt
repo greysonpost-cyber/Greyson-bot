@@ -1,0 +1,15 @@
+DRIPCORE V3 PATCH-ONLY UPDATE
+
+1. Extract this ZIP.
+2. Upload the CONTENTS into the root of your GitHub repository.
+3. Allow GitHub to replace files with matching paths.
+4. Do not delete your existing files or data/bot.sqlite.
+5. Add OWNER_IDS to Railway if you want bot owners besides the Discord server owner.
+6. Run npm run deploy once, then redeploy/restart Railway.
+
+Required bot permission:
+- Manage Roles, with the bot role placed above all collectible roles.
+
+Optional environment values:
+OWNER_IDS=discordUserId1,discordUserId2
+MINIGAME_DAILY_CAP=20
