@@ -1,26 +1,16 @@
-UPLOAD THE EXTRACTED CONTENTS TO THE ROOT OF YOUR GITHUB REPOSITORY.
-Do not upload the ZIP as one file.
+DRIPCORE ARTIFACT DELETE UPDATE
 
-Your repository root should contain:
-- package.json
-- package-lock.json
-- railway.json
-- src/
-- README.md
-- .env.example
+1. Open your bot repository.
+2. Upload the included src folder into the repository root.
+3. Replace the existing file when asked:
+   src/commands/economy/artifact.js
+4. Redeploy/restart the bot so Discord receives the updated slash command.
+5. Use:
+   /artifact delete type_id:<TYPE ID> confirmation:DELETE
 
-Required Railway variables:
-- DISCORD_TOKEN
-- CLIENT_ID
-- GUILD_ID
+Optional:
+- delete_role:true deletes the Discord collectible role too (default).
+- delete_role:false keeps the role but removes it from recorded owners.
 
-Optional for full AI mention chat:
-- OPENAI_API_KEY
-- OPENAI_MODEL
-
-Railway commands are already configured:
-- Pre-deploy: npm run deploy
-- Start: npm start
-
-After deployment, use /config, /command-permissions, /role-permissions, /giveaway-config, /guild, and /ai to configure everything.
-Never share your Discord token or AI API key.
+WARNING: This permanently removes every numbered copy, all ownership records,
+shop stock, marketplace listings, history, preferences, and affected trades.
