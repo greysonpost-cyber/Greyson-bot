@@ -1,4 +1,4 @@
-DRIPCORE v2.3.1 — TOURNAMENT GAME FLOW + HARD DTI DEADLINE
+DRIPCORE v2.3.2 — BUTTON-BASED DTI SCREENSHOT SUBMISSIONS
 
 UPLOAD
 1. Extract this ZIP.
@@ -7,38 +7,35 @@ UPLOAD
 4. Do NOT replace/delete data/, bot.sqlite, .env, or your Railway Volume.
 5. Commit and let Railway redeploy so the updated slash command registers.
 
-WHAT THIS UPDATE ADDS
-- Only Tournament Managers/admins can report MM2 winners and losers.
-- Dress to Impress submissions have a manager-set hard deadline.
-- The bot rejects late submissions automatically, even if nobody manually closes submissions.
-- One private outfit submission per participant; it may only be replaced before the deadline.
-- Anonymous outfit posting and secret voting with no reactions/public vote count.
-- Participants cannot vote for themselves.
-- Everyone active must vote before voting closes, unless a manager uses the force override.
-- DTI points are assigned automatically: 10, 8, 6, 4, then 1 participation point.
-
-MM2 MANAGER FLOW
-/tournament report-mm2 winner:@Winner loser:@Loser
-Optional: winner_points, loser_points, notes
-Default scoring is winner 10 points and loser 1 point.
+WHAT THIS UPDATE CHANGES
+- Players no longer use /tournament submit-outfit.
+- /tournament open-dti posts a Submit Outfit button and a View Rules button.
+- Clicking Submit Outfit opens a private DM workflow with DripCore.
+- The player sends one image attachment in DMs, keeping the entry anonymous.
+- The message text can be used as an optional caption.
+- Clicking Submit Outfit again before the deadline replaces the previous entry.
+- The database deadline is checked again when the DM screenshot arrives. Late screenshots are rejected even if the button message still exists.
+- The DM collection request lasts up to five minutes and never beyond the actual tournament deadline.
 
 DRESS TO IMPRESS FLOW
 1. Advance the tournament to Round 2.
-2. Open submissions with a hard timer:
+2. A manager opens submissions:
    /tournament open-dti theme:Summer Vacation minutes:10
-3. Players submit before the timer ends:
-   /tournament submit-outfit image:<screenshot> caption:<optional>
-4. After the exact deadline, a manager opens anonymous voting:
+3. The bot posts a public Submit Outfit button.
+4. A participant clicks the button and receives a DM from DripCore.
+5. The participant sends one screenshot in that DM. Optional caption text may be included in the same message.
+6. After the exact deadline, a manager opens anonymous voting:
    /tournament open-dti-voting
-5. Every active participant secretly votes:
+7. Every active participant secretly votes:
    /tournament vote-dti submission:<number>
-6. Close only after everyone voted:
+8. Close after everyone voted:
    /tournament close-dti-voting
-7. Emergency manager override:
+9. Emergency manager override:
    /tournament close-dti-voting force:true
 
 IMPORTANT
+- The bot must be able to DM participants. Users with closed DMs will be told to enable direct messages and click again.
+- Screenshot entries are collected in DMs and are not posted in the tournament channel until the anonymous gallery opens.
 - Vote choices are stored in SQLite but never shown publicly.
-- Only final totals and placements are revealed. Individual votes stay private.
-- The public gallery uses anonymous submission numbers.
-- Late submissions are rejected by comparing the current time to the saved database deadline.
+- Only final totals and placements are revealed; individual votes stay private.
+- Only Tournament Managers/admins can report MM2 winners and losers.

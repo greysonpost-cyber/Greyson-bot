@@ -31,11 +31,6 @@ module.exports = {
       .setDescription('Open Dress to Impress outfit submissions with a hard deadline')
       .addStringOption(o => o.setName('theme').setDescription('Outfit theme').setRequired(true).setMaxLength(80))
       .addIntegerOption(o => o.setName('minutes').setDescription('Minutes allowed to submit').setRequired(true).setMinValue(1).setMaxValue(10080)))
-    .addSubcommand(sub => sub
-      .setName('submit-outfit')
-      .setDescription('Submit one Dress to Impress outfit before the deadline')
-      .addAttachmentOption(o => o.setName('image').setDescription('Your outfit screenshot').setRequired(true))
-      .addStringOption(o => o.setName('caption').setDescription('Optional short caption').setMaxLength(80)))
     .addSubcommand(sub => sub.setName('open-dti-voting').setDescription('Post anonymous DTI entries and open secret voting'))
     .addSubcommand(sub => sub
       .setName('vote-dti')

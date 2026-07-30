@@ -33,6 +33,8 @@ const q = {
   dtiVote: db.prepare(`SELECT * FROM tournament_votes WHERE tournament_id=? AND round_number=2 AND voter_id=?`),
 };
 
+const activeSubmissionCollectors = new Map();
+
 function score(p) {
   return Number(p.contribution_points || 0) + Number(p.round1_points || 0) + Number(p.round2_points || 0) + Number(p.round3_points || 0) + Number(p.round4_points || 0);
 }
@@ -142,7 +144,7 @@ async function updatePanel(client, t) {
 
 async function handleCommand(interaction, client) {
   const sub = interaction.options.getSubcommand();
-  const publicSubs = new Set(['leaderboard', 'participants', 'submit-outfit', 'vote-dti']);
+  const publicSubs = new Set(['leaderboard', 'participants', 'vote-dti']);
   if (!publicSubs.has(sub) && !canManage(interaction)) {
     return interaction.reply({ content: '❌ Only tournament managers or server administrators can use this.', ephemeral: true });
   }
@@ -223,28 +225,22 @@ Loser: ${loser} — **${loserPoints} pts**`, ephemeral: true });
     const deadline = Date.now() + minutes * 60_000;
     db.prepare(`INSERT INTO tournament_round_state (tournament_id,round_number,theme,submission_deadline,voting_open,voting_closed,created_at) VALUES (?,2,?,?,0,0,?) ON CONFLICT(tournament_id,round_number) DO UPDATE SET theme=excluded.theme,submission_deadline=excluded.submission_deadline,voting_open=0,voting_closed=0`).run(t.id, theme, deadline, Date.now());
     const unix = Math.floor(deadline / 1000);
-    return interaction.reply({ content: `👗 **Dress to Impress submissions are open!**
-**Theme:** ${theme}
-**Deadline:** <t:${unix}:F> (<t:${unix}:R>)
-
-Submit with \`/tournament submit-outfit\`. The bot will reject every submission received after the deadline, even if a manager has not manually closed the round yet.
-
-**Rules:** one screenshot per player, outfit must match the theme, no edited replacement after the deadline, and do not reveal which anonymous submission is yours during voting.` });
-  }
-
-  if (sub === 'submit-outfit') {
-    if (t.status !== 'active' || t.current_round !== 2) return interaction.reply({ content: '❌ Outfit submissions are not currently open.', ephemeral: true });
-    const player = q.player.get(t.id, interaction.user.id);
-    if (!player?.active) return interaction.reply({ content: '❌ Only active tournament participants may submit.', ephemeral: true });
-    const state = q.roundState.get(t.id, 2);
-    if (!state?.submission_deadline) return interaction.reply({ content: '❌ A Tournament Manager has not opened submissions yet.', ephemeral: true });
-    if (Date.now() > state.submission_deadline) return interaction.reply({ content: `⏰ Submissions closed <t:${Math.floor(state.submission_deadline / 1000)}:R>. Late entries cannot be accepted.`, ephemeral: true });
-    if (state.voting_open || state.voting_closed) return interaction.reply({ content: '❌ Submissions are locked because voting has started.', ephemeral: true });
-    const image = interaction.options.getAttachment('image');
-    if (!image.contentType?.startsWith('image/')) return interaction.reply({ content: '❌ Please upload an image file.', ephemeral: true });
-    const caption = interaction.options.getString('caption');
-    db.prepare(`INSERT INTO tournament_submissions (tournament_id,round_number,user_id,image_url,caption,submitted_at) VALUES (?,2,?,?,?,?) ON CONFLICT(tournament_id,round_number,user_id) DO UPDATE SET image_url=excluded.image_url,caption=excluded.caption,submitted_at=excluded.submitted_at`).run(t.id, interaction.user.id, image.url, caption, Date.now());
-    return interaction.reply({ content: `✅ Your outfit was saved privately. You may replace it before <t:${Math.floor(state.submission_deadline / 1000)}:F>. After that time, the bot will reject all changes.`, ephemeral: true });
+    const components = [new ActionRowBuilder().addComponents(
+      new ButtonBuilder()
+        .setCustomId(`tournament_dtisubmit_${t.id}`)
+        .setLabel('Submit Outfit')
+        .setEmoji('🖼️')
+        .setStyle(ButtonStyle.Success),
+      new ButtonBuilder()
+        .setCustomId(`tournament_dtirules_${t.id}`)
+        .setLabel('View Rules')
+        .setEmoji('📜')
+        .setStyle(ButtonStyle.Secondary),
+    )];
+    return interaction.reply({
+      content: `👗 **Dress to Impress submissions are open!**\n**Theme:** ${theme}\n**Deadline:** <t:${unix}:F> (<t:${unix}:R>)\n\nClick **Submit Outfit** below. DripCore will privately DM you and collect your screenshot there, so other players cannot see whose entry it is.\n\nThe bot rejects every screenshot received after the deadline. You may replace your entry by clicking the button again before time expires.`,
+      components,
+    });
   }
 
   if (sub === 'open-dti-voting') {
@@ -421,6 +417,68 @@ async function handleInteraction(interaction, client) {
     if (t.participant_role_id) await interaction.member.roles.add(t.participant_role_id).catch(() => {});
     await interaction.reply({ content: `✅ You joined **${t.name}** as Roblox user **${username}**.`, ephemeral: true });
     return updatePanel(client, q.byId.get(t.id));
+  }
+
+  if (action === 'dtirules') {
+    const state = q.roundState.get(t.id, 2);
+    const deadlineText = state?.submission_deadline
+      ? `<t:${Math.floor(state.submission_deadline / 1000)}:F> (<t:${Math.floor(state.submission_deadline / 1000)}:R>)`
+      : 'Not opened yet';
+    return interaction.reply({
+      content: `**👗 Dress to Impress Rules**\n\n• Create one outfit matching the announced theme.\n• Click **Submit Outfit** and send one screenshot to DripCore in DMs.\n• Your screenshot stays private until the anonymous gallery is posted.\n• You may replace your entry only before the deadline.\n• No late entries are accepted.\n• Do not tell people which anonymous outfit belongs to you.\n• During voting, you cannot vote for yourself.\n• Votes and live totals remain secret.\n\n**Submission deadline:** ${deadlineText}`,
+      ephemeral: true,
+    });
+  }
+
+  if (action === 'dtisubmit') {
+    if (t.status !== 'active' || t.current_round !== 2) return interaction.reply({ content: '❌ Outfit submissions are not currently open.', ephemeral: true });
+    const player = q.player.get(t.id, interaction.user.id);
+    if (!player?.active) return interaction.reply({ content: '❌ Only active tournament participants may submit.', ephemeral: true });
+    const state = q.roundState.get(t.id, 2);
+    if (!state?.submission_deadline) return interaction.reply({ content: '❌ A Tournament Manager has not opened submissions yet.', ephemeral: true });
+    if (Date.now() > state.submission_deadline) return interaction.reply({ content: `⏰ Submissions closed <t:${Math.floor(state.submission_deadline / 1000)}:R>. Late entries cannot be accepted.`, ephemeral: true });
+    if (state.voting_open || state.voting_closed) return interaction.reply({ content: '❌ Submissions are locked because voting has started.', ephemeral: true });
+
+    const dm = await interaction.user.createDM().catch(() => null);
+    if (!dm) return interaction.reply({ content: '❌ I could not DM you. Enable direct messages from server members, then click **Submit Outfit** again.', ephemeral: true });
+
+    const collectorKey = `${t.id}:${interaction.user.id}`;
+    const oldCollector = activeSubmissionCollectors.get(collectorKey);
+    if (oldCollector) oldCollector.stop('replaced');
+
+    const remaining = Math.max(1_000, state.submission_deadline - Date.now());
+    const waitTime = Math.min(remaining, 5 * 60_000);
+    await dm.send(`👗 **${t.name} — Dress to Impress Submission**\n**Theme:** ${state.theme || 'Not specified'}\n**Deadline:** <t:${Math.floor(state.submission_deadline / 1000)}:F>\n\nSend **one message containing your outfit screenshot** in this DM within the next ${Math.ceil(waitTime / 60_000)} minute(s). You may type an optional caption in the same message.\n\nOnly image attachments are accepted. Your entry will remain private until anonymous voting opens.`);
+    await interaction.reply({ content: '📩 Check your DMs from DripCore and send your screenshot there. Nothing will be posted publicly.', ephemeral: true });
+
+    const collector = dm.createMessageCollector({
+      filter: message => message.author.id === interaction.user.id,
+      time: waitTime,
+      max: 1,
+    });
+    activeSubmissionCollectors.set(collectorKey, collector);
+
+    collector.on('collect', async message => {
+      activeSubmissionCollectors.delete(collectorKey);
+      const freshTournament = q.byId.get(t.id);
+      const freshState = q.roundState.get(t.id, 2);
+      if (!freshTournament || freshTournament.status !== 'active' || freshTournament.current_round !== 2 || !freshState?.submission_deadline || Date.now() > freshState.submission_deadline || freshState.voting_open || freshState.voting_closed) {
+        return message.reply('⏰ The submission deadline has passed or submissions are now locked. This screenshot was not accepted.');
+      }
+      const image = message.attachments.find(a => a.contentType?.startsWith('image/'));
+      if (!image) {
+        return message.reply('❌ That message did not include an image. Click **Submit Outfit** in the tournament channel again and send one image attachment.');
+      }
+      const caption = message.content?.trim().slice(0, 80) || null;
+      db.prepare(`INSERT INTO tournament_submissions (tournament_id,round_number,user_id,image_url,caption,submitted_at) VALUES (?,2,?,?,?,?) ON CONFLICT(tournament_id,round_number,user_id) DO UPDATE SET image_url=excluded.image_url,caption=excluded.caption,submitted_at=excluded.submitted_at`).run(t.id, interaction.user.id, image.url, caption, Date.now());
+      return message.reply(`✅ Your outfit was saved privately. You may replace it by clicking **Submit Outfit** again before <t:${Math.floor(freshState.submission_deadline / 1000)}:F>.`);
+    });
+
+    collector.on('end', async (_collected, reason) => {
+      if (activeSubmissionCollectors.get(collectorKey) === collector) activeSubmissionCollectors.delete(collectorKey);
+      if (reason === 'time') await dm.send('⌛ Your screenshot request expired. Click **Submit Outfit** again before the tournament deadline to try again.').catch(() => {});
+    });
+    return;
   }
 
   if (action === 'leave') {
