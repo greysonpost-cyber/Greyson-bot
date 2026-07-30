@@ -1,40 +1,44 @@
-DRIPCORE v2.3.0 — TOURNAMENT SYSTEM
+DRIPCORE v2.3.1 — TOURNAMENT GAME FLOW + HARD DTI DEADLINE
 
-UPLOAD:
+UPLOAD
 1. Extract this ZIP.
-2. Upload the included package.json, package-lock.json, and src folder into the ROOT of your GitHub repository.
-3. Replace matching files when asked.
-4. Do NOT replace or delete your data folder, bot.sqlite, .env, or Railway Volume.
-5. Commit and let Railway redeploy. Railway should run npm install and then register the new slash command.
+2. Upload the included src folder into the ROOT of your GitHub repository.
+3. Replace matching files.
+4. Do NOT replace/delete data/, bot.sqlite, .env, or your Railway Volume.
+5. Commit and let Railway redeploy so the updated slash command registers.
 
-FIRST-TIME CONFIGURATION:
-/tournament config manager_role:@Tournament Manager announcement_channel:#tournament participant_role:@Tournament Participant
+WHAT THIS UPDATE ADDS
+- Only Tournament Managers/admins can report MM2 winners and losers.
+- Dress to Impress submissions have a manager-set hard deadline.
+- The bot rejects late submissions automatically, even if nobody manually closes submissions.
+- One private outfit submission per participant; it may only be replaced before the deadline.
+- Anonymous outfit posting and secret voting with no reactions/public vote count.
+- Participants cannot vote for themselves.
+- Everyone active must vote before voting closes, unless a manager uses the force override.
+- DTI points are assigned automatically: 10, 8, 6, 4, then 1 participation point.
 
-CREATE:
-/tournament create name:DRIP Championship prize:<your prize> max_players:64 channel:#tournament participant_role:@Tournament Participant
+MM2 MANAGER FLOW
+/tournament report-mm2 winner:@Winner loser:@Loser
+Optional: winner_points, loser_points, notes
+Default scoring is winner 10 points and loser 1 point.
 
-WORKFLOW:
-1. Members press Join Tournament and enter their Roblox username.
-2. Record prize contributors (maximum 5 starting points):
-   /tournament contribution user:@Member points:1-5
-3. Start Round 1:
-   /tournament start
-4. Record each player's result for the current round:
-   /tournament award user:@Member points:<0-25> note:<result>
-5. Advance:
-   /tournament next-round
-6. After Round 4, /tournament next-round automatically selects the top two finalists.
-7. Use /tournament leaderboard anytime to upload the current custom bracket/leaderboard picture (SVG).
-8. Finish with /tournament end.
+DRESS TO IMPRESS FLOW
+1. Advance the tournament to Round 2.
+2. Open submissions with a hard timer:
+   /tournament open-dti theme:Summer Vacation minutes:10
+3. Players submit before the timer ends:
+   /tournament submit-outfit image:<screenshot> caption:<optional>
+4. After the exact deadline, a manager opens anonymous voting:
+   /tournament open-dti-voting
+5. Every active participant secretly votes:
+   /tournament vote-dti submission:<number>
+6. Close only after everyone voted:
+   /tournament close-dti-voting
+7. Emergency manager override:
+   /tournament close-dti-voting force:true
 
-ROUNDS:
-1. Murder Mystery 2
-2. Dress to Impress
-3. Best Screenshot
-4. Avatar Creator Challenge
-5. Grand Finale between the top two
-
-PERMISSIONS:
-- Administrators and Manage Server members can manage automatically.
-- The configured Tournament Manager role can also create, score, remove, advance, and end.
-- /tournament leaderboard and /tournament participants are public unless restricted through your existing /command-permissions system.
+IMPORTANT
+- Vote choices are stored in SQLite but never shown publicly.
+- Only final totals and placements are revealed. Individual votes stay private.
+- The public gallery uses anonymous submission numbers.
+- Late submissions are rejected by comparing the current time to the saved database deadline.

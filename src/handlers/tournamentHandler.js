@@ -26,6 +26,11 @@ const q = {
   players: db.prepare(`SELECT * FROM tournament_players WHERE tournament_id=? AND active=1 ORDER BY (contribution_points + round1_points + round2_points + round3_points + round4_points) DESC, joined_at ASC`),
   player: db.prepare(`SELECT * FROM tournament_players WHERE tournament_id=? AND user_id=?`),
   count: db.prepare(`SELECT COUNT(*) c FROM tournament_players WHERE tournament_id=? AND active=1`),
+  roundState: db.prepare(`SELECT * FROM tournament_round_state WHERE tournament_id=? AND round_number=?`),
+  dtiSubmissions: db.prepare(`SELECT * FROM tournament_submissions WHERE tournament_id=? AND round_number=2 ORDER BY submitted_at ASC, id ASC`),
+  dtiSubmissionByNumber: db.prepare(`SELECT * FROM tournament_submissions WHERE tournament_id=? AND round_number=2 ORDER BY submitted_at ASC, id ASC LIMIT 1 OFFSET ?`),
+  dtiSubmissionByUser: db.prepare(`SELECT * FROM tournament_submissions WHERE tournament_id=? AND round_number=2 AND user_id=?`),
+  dtiVote: db.prepare(`SELECT * FROM tournament_votes WHERE tournament_id=? AND round_number=2 AND voter_id=?`),
 };
 
 function score(p) {
@@ -137,7 +142,7 @@ async function updatePanel(client, t) {
 
 async function handleCommand(interaction, client) {
   const sub = interaction.options.getSubcommand();
-  const publicSubs = new Set(['leaderboard', 'participants']);
+  const publicSubs = new Set(['leaderboard', 'participants', 'submit-outfit', 'vote-dti']);
   if (!publicSubs.has(sub) && !canManage(interaction)) {
     return interaction.reply({ content: '❌ Only tournament managers or server administrators can use this.', ephemeral: true });
   }
@@ -186,6 +191,118 @@ async function handleCommand(interaction, client) {
     const board = await renderBoard(interaction.guild, t, players);
     await interaction.reply({ content: `🏆 **${t.name} has started!**\nRound 1: ${GAMES[0]}`, files: [board] });
     return updatePanel(client, t);
+  }
+
+  if (sub === 'report-mm2') {
+    if (t.status !== 'active' || t.current_round !== 1) return interaction.reply({ content: '❌ MM2 results can only be reported during Round 1.', ephemeral: true });
+    const winner = interaction.options.getUser('winner');
+    const loser = interaction.options.getUser('loser');
+    if (winner.id === loser.id) return interaction.reply({ content: '❌ Winner and loser must be different players.', ephemeral: true });
+    const wp = q.player.get(t.id, winner.id);
+    const lp = q.player.get(t.id, loser.id);
+    if (!wp?.active || !lp?.active) return interaction.reply({ content: '❌ Both users must be active tournament participants.', ephemeral: true });
+    const winnerPoints = interaction.options.getInteger('winner_points') ?? 10;
+    const loserPoints = interaction.options.getInteger('loser_points') ?? 1;
+    const notes = interaction.options.getString('notes');
+    const tx = db.transaction(() => {
+      db.prepare(`UPDATE tournament_players SET round1_points=? WHERE tournament_id=? AND user_id=?`).run(winnerPoints, t.id, winner.id);
+      db.prepare(`UPDATE tournament_players SET round1_points=? WHERE tournament_id=? AND user_id=?`).run(loserPoints, t.id, loser.id);
+      db.prepare(`INSERT INTO tournament_mm2_results (tournament_id,winner_id,loser_id,winner_points,loser_points,reported_by,notes,created_at) VALUES (?,?,?,?,?,?,?,?)`).run(t.id, winner.id, loser.id, winnerPoints, loserPoints, interaction.user.id, notes, Date.now());
+    });
+    tx();
+    await interaction.reply({ content: `✅ MM2 result saved by a Tournament Manager.
+Winner: ${winner} — **${winnerPoints} pts**
+Loser: ${loser} — **${loserPoints} pts**`, ephemeral: true });
+    return updatePanel(client, q.byId.get(t.id));
+  }
+
+  if (sub === 'open-dti') {
+    if (t.status !== 'active' || t.current_round !== 2) return interaction.reply({ content: '❌ Dress to Impress submissions can only open during Round 2.', ephemeral: true });
+    const theme = interaction.options.getString('theme');
+    const minutes = interaction.options.getInteger('minutes');
+    const deadline = Date.now() + minutes * 60_000;
+    db.prepare(`INSERT INTO tournament_round_state (tournament_id,round_number,theme,submission_deadline,voting_open,voting_closed,created_at) VALUES (?,2,?,?,0,0,?) ON CONFLICT(tournament_id,round_number) DO UPDATE SET theme=excluded.theme,submission_deadline=excluded.submission_deadline,voting_open=0,voting_closed=0`).run(t.id, theme, deadline, Date.now());
+    const unix = Math.floor(deadline / 1000);
+    return interaction.reply({ content: `👗 **Dress to Impress submissions are open!**
+**Theme:** ${theme}
+**Deadline:** <t:${unix}:F> (<t:${unix}:R>)
+
+Submit with \`/tournament submit-outfit\`. The bot will reject every submission received after the deadline, even if a manager has not manually closed the round yet.
+
+**Rules:** one screenshot per player, outfit must match the theme, no edited replacement after the deadline, and do not reveal which anonymous submission is yours during voting.` });
+  }
+
+  if (sub === 'submit-outfit') {
+    if (t.status !== 'active' || t.current_round !== 2) return interaction.reply({ content: '❌ Outfit submissions are not currently open.', ephemeral: true });
+    const player = q.player.get(t.id, interaction.user.id);
+    if (!player?.active) return interaction.reply({ content: '❌ Only active tournament participants may submit.', ephemeral: true });
+    const state = q.roundState.get(t.id, 2);
+    if (!state?.submission_deadline) return interaction.reply({ content: '❌ A Tournament Manager has not opened submissions yet.', ephemeral: true });
+    if (Date.now() > state.submission_deadline) return interaction.reply({ content: `⏰ Submissions closed <t:${Math.floor(state.submission_deadline / 1000)}:R>. Late entries cannot be accepted.`, ephemeral: true });
+    if (state.voting_open || state.voting_closed) return interaction.reply({ content: '❌ Submissions are locked because voting has started.', ephemeral: true });
+    const image = interaction.options.getAttachment('image');
+    if (!image.contentType?.startsWith('image/')) return interaction.reply({ content: '❌ Please upload an image file.', ephemeral: true });
+    const caption = interaction.options.getString('caption');
+    db.prepare(`INSERT INTO tournament_submissions (tournament_id,round_number,user_id,image_url,caption,submitted_at) VALUES (?,2,?,?,?,?) ON CONFLICT(tournament_id,round_number,user_id) DO UPDATE SET image_url=excluded.image_url,caption=excluded.caption,submitted_at=excluded.submitted_at`).run(t.id, interaction.user.id, image.url, caption, Date.now());
+    return interaction.reply({ content: `✅ Your outfit was saved privately. You may replace it before <t:${Math.floor(state.submission_deadline / 1000)}:F>. After that time, the bot will reject all changes.`, ephemeral: true });
+  }
+
+  if (sub === 'open-dti-voting') {
+    if (t.status !== 'active' || t.current_round !== 2) return interaction.reply({ content: '❌ DTI voting can only open during Round 2.', ephemeral: true });
+    const state = q.roundState.get(t.id, 2);
+    if (!state?.submission_deadline) return interaction.reply({ content: '❌ Open submissions first.', ephemeral: true });
+    if (Date.now() < state.submission_deadline) return interaction.reply({ content: `❌ Submissions are still open until <t:${Math.floor(state.submission_deadline / 1000)}:F>.`, ephemeral: true });
+    const submissions = q.dtiSubmissions.all(t.id);
+    if (submissions.length < 2) return interaction.reply({ content: '❌ At least two outfits are required to open voting.', ephemeral: true });
+    db.prepare(`UPDATE tournament_round_state SET voting_open=1,voting_closed=0 WHERE tournament_id=? AND round_number=2`).run(t.id);
+    await interaction.reply({ content: `🗳️ **Anonymous Dress to Impress voting is open!**
+Theme: **${state.theme || 'Not specified'}**
+Use \`/tournament vote-dti submission:<number>\`. Votes are saved privately and totals remain hidden. You cannot vote for your own outfit. Every active participant must vote before managers can close voting.` });
+    for (let i = 0; i < submissions.length; i++) {
+      const subm = submissions[i];
+      const embed = new EmbedBuilder().setColor(0x22c55e).setTitle(`Anonymous Outfit #${i + 1}`).setImage(subm.image_url);
+      if (subm.caption) embed.setDescription(subm.caption);
+      await interaction.channel.send({ embeds: [embed] });
+    }
+    return;
+  }
+
+  if (sub === 'vote-dti') {
+    if (t.status !== 'active' || t.current_round !== 2) return interaction.reply({ content: '❌ DTI voting is not active.', ephemeral: true });
+    const player = q.player.get(t.id, interaction.user.id);
+    if (!player?.active) return interaction.reply({ content: '❌ Only active tournament participants may vote.', ephemeral: true });
+    const state = q.roundState.get(t.id, 2);
+    if (!state?.voting_open || state.voting_closed) return interaction.reply({ content: '❌ Voting is not open.', ephemeral: true });
+    const number = interaction.options.getInteger('submission');
+    const submission = q.dtiSubmissionByNumber.get(t.id, number - 1);
+    if (!submission) return interaction.reply({ content: '❌ That anonymous submission number does not exist.', ephemeral: true });
+    if (submission.user_id === interaction.user.id) return interaction.reply({ content: '❌ You cannot vote for your own outfit.', ephemeral: true });
+    db.prepare(`INSERT INTO tournament_votes (tournament_id,round_number,voter_id,submission_id,voted_at) VALUES (?,2,?,?,?) ON CONFLICT(tournament_id,round_number,voter_id) DO UPDATE SET submission_id=excluded.submission_id,voted_at=excluded.voted_at`).run(t.id, interaction.user.id, submission.id, Date.now());
+    return interaction.reply({ content: `✅ Your secret vote for **Anonymous Outfit #${number}** was saved. No reaction or public count is shown. You may change it while voting remains open.`, ephemeral: true });
+  }
+
+  if (sub === 'close-dti-voting') {
+    const state = q.roundState.get(t.id, 2);
+    if (!state?.voting_open || state.voting_closed) return interaction.reply({ content: '❌ DTI voting is not currently open.', ephemeral: true });
+    const force = interaction.options.getBoolean('force') || false;
+    const eligible = db.prepare(`SELECT user_id FROM tournament_players WHERE tournament_id=? AND active=1`).all(t.id);
+    const voted = new Set(db.prepare(`SELECT voter_id FROM tournament_votes WHERE tournament_id=? AND round_number=2`).all(t.id).map(r => r.voter_id));
+    const missing = eligible.filter(p => !voted.has(p.user_id));
+    if (missing.length && !force) return interaction.reply({ content: `⚠️ Voting cannot close yet. **${voted.size}/${eligible.length}** eligible participants have voted.
+Still missing: ${missing.map(x => `<@${x.user_id}>`).join(' ').slice(0, 1500)}
+
+Use \`force:true\` only for unavailable, removed, or disqualified players.`, ephemeral: true });
+    db.prepare(`UPDATE tournament_round_state SET voting_open=0,voting_closed=1 WHERE tournament_id=? AND round_number=2`).run(t.id);
+    const results = db.prepare(`SELECT s.id,s.user_id,COUNT(v.submission_id) votes FROM tournament_submissions s LEFT JOIN tournament_votes v ON v.submission_id=s.id AND v.tournament_id=s.tournament_id AND v.round_number=2 WHERE s.tournament_id=? AND s.round_number=2 GROUP BY s.id ORDER BY votes DESC,s.submitted_at ASC`).all(t.id);
+    const pointScale = [10, 8, 6, 4];
+    const tx = db.transaction(() => results.forEach((r, i) => db.prepare(`UPDATE tournament_players SET round2_points=? WHERE tournament_id=? AND user_id=?`).run(pointScale[i] ?? 1, t.id, r.user_id)));
+    tx();
+    const lines = results.map((r, i) => `**${i + 1}.** <@${r.user_id}> — **${r.votes} votes** — **${pointScale[i] ?? 1} pts**`).join('\n');
+    await interaction.reply({ content: `✅ **DTI voting closed${force && missing.length ? ' with manager override' : ''}.**
+Individual voters remain private.
+
+${lines}` });
+    return updatePanel(client, q.byId.get(t.id));
   }
 
   if (sub === 'award') {

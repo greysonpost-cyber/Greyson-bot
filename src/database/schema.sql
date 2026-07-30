@@ -260,3 +260,47 @@ CREATE TABLE IF NOT EXISTS tournament_awards (
   awarded_by TEXT NOT NULL,
   created_at INTEGER NOT NULL
 );
+
+-- Tournament round operations (v2.3.1)
+CREATE TABLE IF NOT EXISTS tournament_round_state (
+  tournament_id INTEGER NOT NULL,
+  round_number INTEGER NOT NULL,
+  theme TEXT,
+  submission_deadline INTEGER,
+  voting_open INTEGER NOT NULL DEFAULT 0,
+  voting_closed INTEGER NOT NULL DEFAULT 0,
+  created_at INTEGER NOT NULL,
+  PRIMARY KEY (tournament_id, round_number)
+);
+
+CREATE TABLE IF NOT EXISTS tournament_submissions (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  tournament_id INTEGER NOT NULL,
+  round_number INTEGER NOT NULL,
+  user_id TEXT NOT NULL,
+  image_url TEXT NOT NULL,
+  caption TEXT,
+  submitted_at INTEGER NOT NULL,
+  UNIQUE(tournament_id, round_number, user_id)
+);
+
+CREATE TABLE IF NOT EXISTS tournament_votes (
+  tournament_id INTEGER NOT NULL,
+  round_number INTEGER NOT NULL,
+  voter_id TEXT NOT NULL,
+  submission_id INTEGER NOT NULL,
+  voted_at INTEGER NOT NULL,
+  PRIMARY KEY (tournament_id, round_number, voter_id)
+);
+
+CREATE TABLE IF NOT EXISTS tournament_mm2_results (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  tournament_id INTEGER NOT NULL,
+  winner_id TEXT NOT NULL,
+  loser_id TEXT NOT NULL,
+  winner_points INTEGER NOT NULL DEFAULT 10,
+  loser_points INTEGER NOT NULL DEFAULT 1,
+  reported_by TEXT NOT NULL,
+  notes TEXT,
+  created_at INTEGER NOT NULL
+);

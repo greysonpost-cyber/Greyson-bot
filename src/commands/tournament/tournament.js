@@ -19,6 +19,33 @@ module.exports = {
       .addRoleOption(o => o.setName('participant_role').setDescription('Role given when a player joins')))
     .addSubcommand(sub => sub.setName('start').setDescription('Close registration and begin Round 1'))
     .addSubcommand(sub => sub
+      .setName('report-mm2')
+      .setDescription('Manager-only: report an MM2 winner and loser')
+      .addUserOption(o => o.setName('winner').setDescription('Match winner').setRequired(true))
+      .addUserOption(o => o.setName('loser').setDescription('Match loser').setRequired(true))
+      .addIntegerOption(o => o.setName('winner_points').setDescription('Points for winner').setMinValue(0).setMaxValue(25))
+      .addIntegerOption(o => o.setName('loser_points').setDescription('Points for loser').setMinValue(0).setMaxValue(25))
+      .addStringOption(o => o.setName('notes').setDescription('Optional match notes').setMaxLength(150)))
+    .addSubcommand(sub => sub
+      .setName('open-dti')
+      .setDescription('Open Dress to Impress outfit submissions with a hard deadline')
+      .addStringOption(o => o.setName('theme').setDescription('Outfit theme').setRequired(true).setMaxLength(80))
+      .addIntegerOption(o => o.setName('minutes').setDescription('Minutes allowed to submit').setRequired(true).setMinValue(1).setMaxValue(10080)))
+    .addSubcommand(sub => sub
+      .setName('submit-outfit')
+      .setDescription('Submit one Dress to Impress outfit before the deadline')
+      .addAttachmentOption(o => o.setName('image').setDescription('Your outfit screenshot').setRequired(true))
+      .addStringOption(o => o.setName('caption').setDescription('Optional short caption').setMaxLength(80)))
+    .addSubcommand(sub => sub.setName('open-dti-voting').setDescription('Post anonymous DTI entries and open secret voting'))
+    .addSubcommand(sub => sub
+      .setName('vote-dti')
+      .setDescription('Secretly vote for one DTI submission')
+      .addIntegerOption(o => o.setName('submission').setDescription('Anonymous submission number').setRequired(true).setMinValue(1)))
+    .addSubcommand(sub => sub
+      .setName('close-dti-voting')
+      .setDescription('Close DTI voting after every eligible participant has voted')
+      .addBooleanOption(o => o.setName('force').setDescription('Manager override if some eligible players have not voted')))
+    .addSubcommand(sub => sub
       .setName('award')
       .setDescription('Award round points to a participant')
       .addUserOption(o => o.setName('user').setDescription('Participant').setRequired(true))
