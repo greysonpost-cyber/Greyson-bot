@@ -3,6 +3,8 @@ const {
   ChannelType, AttachmentBuilder, Routes, ModalBuilder, TextInputBuilder, TextInputStyle
 } = require('discord.js');
 const db = require('../database/db');
+const eco = require('../services/economy');
+const arts = require('../services/artifacts');
 const { successEmbed, errorEmbed, baseEmbed, infoEmbed } = require('../utils/embeds');
 const { sendLog } = require('../utils/logger');
 const { getConfig } = require('../utils/config');
@@ -26,7 +28,8 @@ const REQUIRED_SERVER_TAG = 'DRIP';
 function entryButton(g) {
   return new ActionRowBuilder().addComponents(
     new ButtonBuilder().setCustomId(`giveaway_enter:${g.id}`).setLabel(`🎉 ${countEntries.get(g.id).c}`).setStyle(ButtonStyle.Primary),
-    new ButtonBuilder().setCustomId(`giveaway_participants:${g.id}`).setLabel('Participants').setEmoji('👥').setStyle(ButtonStyle.Secondary)
+    new ButtonBuilder().setCustomId(`giveaway_participants:${g.id}`).setLabel('Participants').setEmoji('👥').setStyle(ButtonStyle.Secondary),
+    new ButtonBuilder().setCustomId(`giveaway_tokenboost:${g.id}`).setLabel('+1 Entry • 1 PT').setEmoji('💠').setStyle(ButtonStyle.Success)
   );
 }
 
@@ -77,6 +80,8 @@ function giveawayEmbed(g) {
     embed.addFields({ name: '✨ Bonus Entries', value: 'No bonus-entry roles are configured.', inline: false });
   }
 
+  embed.addFields({ name: '💠 Power Token Boost', value: 'After entering, press **+1 Entry • 1 PT** to buy one extra entry. Limit: one boost per giveaway.', inline: false });
+
   const boosterRole = getConfig(g.guild_id, 'giveaway_booster_role');
   embed.addFields({
     name: '🏷️ Winner Requirement',
@@ -87,6 +92,13 @@ function giveawayEmbed(g) {
   });
 
   return embed;
+}
+
+async function refreshGiveawayMessage(client, g) {
+  const channel = await client.channels.fetch(g.channel_id).catch(() => null);
+  if (!channel?.isTextBased() || !g.message_id) return;
+  const message = await channel.messages.fetch(g.message_id).catch(() => null);
+  if (message) await message.edit({ embeds: [giveawayEmbed(g)], components: [entryButton(g)] }).catch(() => {});
 }
 
 function memberEntries(member) {
@@ -356,6 +368,25 @@ Use the buttons on the next message to complete this claim.`
   return channel;
 }
 
+async function applyFriendlyNeighborhoodRefunds(g, winners, client) {
+  const winnerSet = new Set(winners);
+  const boosts = db.prepare('SELECT * FROM giveaway_token_boosts WHERE giveaway_id=?').all(g.id);
+  const day = eco.dayKey();
+  for (const boost of boosts) {
+    if (winnerSet.has(boost.user_id) || !arts.ownsNamed(g.guild_id, boost.user_id, 'Friendly Neighborhood')) continue;
+    if (db.prepare('SELECT 1 FROM artifact_passive_refunds WHERE giveaway_id=? AND user_id=? AND artifact_name=?').get(g.id,boost.user_id,'Friendly Neighborhood')) continue;
+    const used = db.prepare('SELECT uses FROM artifact_passive_daily_usage WHERE guild_id=? AND user_id=? AND passive_key=? AND day_key=?').get(g.guild_id,boost.user_id,'friendly_refund',day)?.uses || 0;
+    if (used >= 2) continue;
+    db.transaction(()=>{
+      eco.add(g.guild_id,boost.user_id,1,`Friendly Neighborhood refund: giveaway #${g.id}`,'SYSTEM');
+      db.prepare(`INSERT INTO artifact_passive_refunds(giveaway_id,guild_id,user_id,artifact_name,refunded_at) VALUES(?,?,?,?,?)`).run(g.id,g.guild_id,boost.user_id,'Friendly Neighborhood',Date.now());
+      db.prepare(`INSERT INTO artifact_passive_daily_usage(guild_id,user_id,passive_key,day_key,uses) VALUES(?,?,?,?,1) ON CONFLICT(guild_id,user_id,passive_key,day_key) DO UPDATE SET uses=uses+1`).run(g.guild_id,boost.user_id,'friendly_refund',day);
+    })();
+    const user=await client.users.fetch(boost.user_id).catch(()=>null);
+    await user?.send(`🌀 **Friendly Neighborhood activated!** You lost **${g.prize}**, so your spent Power Token was refunded. (${used+1}/2 refunds used today)`).catch(()=>{});
+  }
+}
+
 async function endGiveaway(client, id, { reroll = false } = {}) {
   const g = getGiveaway.get(id);
   if (!g) return null;
@@ -364,6 +395,7 @@ async function endGiveaway(client, id, { reroll = false } = {}) {
   const channel = await guild.channels.fetch(g.channel_id).catch(() => null);
   const winners = await pickWinners(g, client);
   updateEnded.run(JSON.stringify(winners), id);
+  if (!reroll) await applyFriendlyNeighborhoodRefunds(g, winners, client);
   const text = winners.length ? winners.map(userId => `<@${userId}>`).join(', ') : `No eligible entries with the **${REQUIRED_SERVER_TAG}** server tag.`;
   if (channel) {
     await channel.send({ embeds: [successEmbed(reroll ? 'Giveaway Rerolled!' : 'Giveaway Ended!', `**${g.prize}**\n**Winner(s):** ${text}\nAutomatic claim tickets were created.`)] });
@@ -454,12 +486,25 @@ async function handleInteraction(i, client) {
     const channel = await i.guild.channels.fetch(g.channel_id).catch(() => null);
     const message = channel?.isTextBased() && g.message_id ? await channel.messages.fetch(g.message_id).catch(() => null) : null;
     if (message) {
-      await message.edit({ embeds: [giveawayEmbed(g)], components: [new ActionRowBuilder().addComponents(
-        new ButtonBuilder().setCustomId(`giveaway_enter:${g.id}`).setLabel(`🎉 ${total}`).setStyle(ButtonStyle.Primary),
-        new ButtonBuilder().setCustomId(`giveaway_participants:${g.id}`).setLabel('Participants').setEmoji('👥').setStyle(ButtonStyle.Secondary)
-      )] }).catch(() => {});
+      await message.edit({ embeds: [giveawayEmbed(g)], components: [entryButton(g)] }).catch(() => {});
     }
     return i.reply({ embeds: [successEmbed('Entered!', `Roblox username: **${robloxUsername}**\nYou received **${entries}** entr${entries === 1 ? 'y' : 'ies'}${bypass ? ' and your booster bypass is active.' : '.'}`)], ephemeral: true });
+  }
+
+  if (action === 'giveaway_tokenboost') {
+    const g = getGiveaway.get(id);
+    if (!g) return i.reply({ embeds: [errorEmbed('Giveaway Not Found')], ephemeral: true });
+    if (g.ended || g.locked) return i.reply({ embeds: [errorEmbed(g.ended ? 'Giveaway Ended' : 'Giveaway Locked')], ephemeral: true });
+    const entry = getEntry.get(id, i.user.id);
+    if (!entry) return i.reply({ embeds: [errorEmbed('Enter First', 'Enter the giveaway normally before buying a Power Token entry.')], ephemeral: true });
+    if (db.prepare('SELECT 1 FROM giveaway_token_boosts WHERE giveaway_id=? AND user_id=?').get(id,i.user.id)) return i.reply({ embeds: [infoEmbed('Boost Already Used', 'You can purchase only one Power Token entry per giveaway.')], ephemeral: true });
+    if (!eco.spend(i.guild.id,i.user.id,1,`Giveaway #${id} extra entry`,i.user.id)) return i.reply({ embeds: [errorEmbed('Not Enough Power Tokens', `You need **1 PT**. Your balance is **${eco.bal(i.guild.id,i.user.id)} PT**.`)], ephemeral: true });
+    db.transaction(()=>{
+      db.prepare('UPDATE giveaway_entries SET entries=entries+1 WHERE giveaway_id=? AND user_id=?').run(id,i.user.id);
+      db.prepare('INSERT INTO giveaway_token_boosts(giveaway_id,guild_id,user_id,tokens_spent,created_at) VALUES(?,?,?,?,?)').run(id,i.guild.id,i.user.id,1,Date.now());
+    })();
+    await refreshGiveawayMessage(client,g);
+    return i.reply({ embeds: [successEmbed('Power Token Entry Added!', `You now have **${entry.entries+1} entries** in **${g.prize}**.\n\nIf you own **Friendly Neighborhood** and lose, this token can be refunded (up to 2 times per day).`)], ephemeral: true });
   }
 
   if (action === 'giveaway_leave_confirm') {
@@ -474,14 +519,16 @@ async function handleInteraction(i, client) {
     const existing = getEntry.get(id, i.user.id);
     if (!existing) return i.update({ embeds: [infoEmbed('Not Entered', 'You are not entered in this giveaway.')], components: [] });
 
-    deleteEntry.run(id, i.user.id);
+    const paidBoost = db.prepare('SELECT * FROM giveaway_token_boosts WHERE giveaway_id=? AND user_id=?').get(id,i.user.id);
+    db.transaction(()=>{
+      deleteEntry.run(id, i.user.id);
+      db.prepare('DELETE FROM giveaway_token_boosts WHERE giveaway_id=? AND user_id=?').run(id,i.user.id);
+      if (paidBoost) eco.add(i.guild.id,i.user.id,paidBoost.tokens_spent,'Refunded after leaving giveaway','SYSTEM');
+    })();
     const total = countEntries.get(id).c;
     const giveawayMessage = await i.channel.messages.fetch(g.message_id).catch(() => null);
     if (giveawayMessage) {
-      await giveawayMessage.edit({ embeds: [giveawayEmbed(g)], components: [new ActionRowBuilder().addComponents(
-        new ButtonBuilder().setCustomId(`giveaway_enter:${g.id}`).setLabel(`🎉 ${total}`).setStyle(ButtonStyle.Primary),
-        new ButtonBuilder().setCustomId(`giveaway_participants:${g.id}`).setLabel('Participants').setEmoji('👥').setStyle(ButtonStyle.Secondary)
-      )] }).catch(() => {});
+      await giveawayMessage.edit({ embeds: [giveawayEmbed(g)], components: [entryButton(g)] }).catch(() => {});
     }
     return i.update({
       embeds: [successEmbed('Left Giveaway', 'All of your entries, including bonus entries, were removed.')],
@@ -629,4 +676,4 @@ function startScheduler(client) {
   }, 15_000);
 }
 
-module.exports = { handleInteraction, entryButton, giveawayEmbed, endGiveaway, startScheduler, updateLocked, getGiveawayByMessage };
+module.exports = { handleInteraction, entryButton, giveawayEmbed, refreshGiveawayMessage, endGiveaway, startScheduler, updateLocked, getGiveawayByMessage };

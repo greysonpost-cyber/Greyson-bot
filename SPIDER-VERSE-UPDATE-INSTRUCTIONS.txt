@@ -1,0 +1,39 @@
+DRIPCORE SPIDER-VERSE PASSIVES + ECONOMY THEME UPDATE
+
+1. Open this ZIP.
+2. Upload the included src folder into the ROOT of your GitHub repository.
+3. Choose to replace/overwrite files when GitHub asks.
+4. Redeploy/restart the bot.
+5. Run the bot's slash-command deploy command once (usually: npm run deploy).
+
+NEW COMMANDS
+/passive spider-man giveaway_id:<ID>
+  - Owner of Spider-Man chooses any active giveaway they already entered.
+  - Adds +1 entry, once every 24 hours.
+
+/passive web-swing
+  - Owner of Web Swing claims +1 Power Token, once every 24 hours.
+
+/passive status
+  - Shows ownership, cooldowns, and Friendly Neighborhood refund usage.
+
+FRIENDLY NEIGHBORHOOD
+- Giveaway embeds now include a “+1 Entry • 1 PT” button.
+- Each person can buy one extra entry per giveaway.
+- If an owner of Friendly Neighborhood spends the token and loses, 1 PT is automatically refunded.
+- Maximum 2 refunds per UTC day.
+- Leaving before the giveaway ends removes the paid entry and returns the token.
+
+ARTIFACT NAMES MUST MATCH EXACTLY
+Spider-Man
+Web Swing
+Friendly Neighborhood
+
+RARITIES / COPIES TO CREATE
+Spider-Man: Limited, 5 copies
+Web Swing: Legendary, 4 copies
+Friendly Neighborhood: Secret, 3 copies
+
+IMPORTANT
+- Existing databases are upgraded automatically on startup.
+- This patch does not automatically create or stock the three artifacts; use /artifact create and /shop stock.

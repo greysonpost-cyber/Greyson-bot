@@ -100,4 +100,40 @@ db.exec(`CREATE TABLE IF NOT EXISTS giveaway_ticket_votes (
   transcript_sent INTEGER NOT NULL DEFAULT 0
 );`);
 
+
+// Spider-Verse artifact passive tracking (safe for existing databases).
+db.exec(`
+CREATE TABLE IF NOT EXISTS artifact_passive_cooldowns (
+  guild_id TEXT NOT NULL,
+  user_id TEXT NOT NULL,
+  passive_key TEXT NOT NULL,
+  last_used_at INTEGER NOT NULL,
+  PRIMARY KEY(guild_id,user_id,passive_key)
+);
+CREATE TABLE IF NOT EXISTS artifact_passive_daily_usage (
+  guild_id TEXT NOT NULL,
+  user_id TEXT NOT NULL,
+  passive_key TEXT NOT NULL,
+  day_key TEXT NOT NULL,
+  uses INTEGER NOT NULL DEFAULT 0,
+  PRIMARY KEY(guild_id,user_id,passive_key,day_key)
+);
+CREATE TABLE IF NOT EXISTS giveaway_token_boosts (
+  giveaway_id INTEGER NOT NULL,
+  guild_id TEXT NOT NULL,
+  user_id TEXT NOT NULL,
+  tokens_spent INTEGER NOT NULL DEFAULT 1,
+  created_at INTEGER NOT NULL,
+  PRIMARY KEY(giveaway_id,user_id)
+);
+CREATE TABLE IF NOT EXISTS artifact_passive_refunds (
+  giveaway_id INTEGER NOT NULL,
+  guild_id TEXT NOT NULL,
+  user_id TEXT NOT NULL,
+  artifact_name TEXT NOT NULL,
+  refunded_at INTEGER NOT NULL,
+  PRIMARY KEY(giveaway_id,user_id,artifact_name)
+);
+`);
+
 module.exports = db;
