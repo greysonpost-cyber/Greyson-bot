@@ -7,6 +7,7 @@ const economyHandler = require('../handlers/economyHandler');
 const economy = require('../services/economy');
 const tournamentHandler = require('../handlers/tournamentHandler');
 const tokenDrops = require('../services/tokenDrops');
+const wheelHandler = require('../handlers/wheelHandler');
 const { getConfig } = require('../utils/config');
 
 module.exports = {
@@ -59,10 +60,13 @@ module.exports = {
             if (customId.startsWith('econ_')) return economyHandler.handle(interaction, client);
             if (customId.startsWith('minireact:')) {
                 const parts = customId.split(':');
-                const reward = economy.rewardGame(interaction.guild.id, interaction.user.id, Math.floor(Math.random() * 5) + 1);
+                const reward = economy.rewardGame(interaction.guild.id, interaction.user.id, 1);
+                await require('../services/specialRoleEffects').trigger(interaction.channel, interaction.member, 'minigame').catch(() => {});
                 await interaction.update({ content: `⚡ ${interaction.user} was fastest! ${reward ? `They earned **${reward} PT**.` : `They reached today's minigame cap.`}`, components: [] });
                 return;
             }
+            if (customId === 'econ_token_leaderboard') return economyHandler.handle(interaction, client);
+            if (customId.startsWith('wheel_')) return wheelHandler.handleInteraction(interaction, client);
             if (customId.startsWith('token_drop:')) return tokenDrops.handleInteraction(interaction, client);
             if (customId.startsWith('tournament_')) return tournamentHandler.handleInteraction(interaction, client);
         } catch (err) {

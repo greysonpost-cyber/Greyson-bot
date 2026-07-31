@@ -197,4 +197,17 @@ CREATE TABLE IF NOT EXISTS tournament_token_boosts (
 );
 `);
 
+
+// Cosmetics/live leaderboard/paid giveaway auto-claim (safe for upgrades).
+db.exec(`
+CREATE TABLE IF NOT EXISTS giveaway_auto_claim_purchases (
+  giveaway_id INTEGER NOT NULL, guild_id TEXT NOT NULL, user_id TEXT NOT NULL,
+  tokens_spent INTEGER NOT NULL DEFAULT 5, created_at INTEGER NOT NULL,
+  PRIMARY KEY(giveaway_id,user_id)
+);
+CREATE TABLE IF NOT EXISTS token_leaderboard_messages (
+  guild_id TEXT PRIMARY KEY, channel_id TEXT NOT NULL, message_id TEXT NOT NULL, updated_at INTEGER NOT NULL
+);
+`);
+
 module.exports = db;

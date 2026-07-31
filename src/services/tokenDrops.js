@@ -102,7 +102,7 @@ async function createDrop(client, guild, now) {
     return;
   }
 
-  const amount = Math.floor(Math.random() * 3) + 1;
+  const amount = Math.floor(Math.random() * 2) + 1;
   const expiresAt = now + CLAIM_WINDOW_MS;
   const result = db.prepare(`
     INSERT INTO token_drops

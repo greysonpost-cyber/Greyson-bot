@@ -1,0 +1,16 @@
+DRIPCORE COSMETICS & POWER PATCH
+
+1. Back up your current bot.
+2. Copy every file/folder from this patch into the root of your bot repository.
+3. Allow it to replace matching files.
+4. Redeploy/restart the bot.
+5. Run your normal slash-command deployment command once so /tokens leaderboard appears.
+
+Included:
+- 15-second color-cycling special-role effects for giveaway, tournament, minigame, and first general message after 5 minutes.
+- Collection roles receive priority and exclusive Spider-Verse variants.
+- Minigame wins award exactly 1 PT.
+- Automatic 10-minute drops award 1-2 PT.
+- /tokens leaderboard with a live refresh button.
+- Giveaway Auto Claim power for 5 PT.
+- Giveaway winners always receive automatic private tickets; manual Claim only remains for winners without auto-claim.

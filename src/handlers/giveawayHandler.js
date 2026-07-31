@@ -38,7 +38,8 @@ function entryComponents(g) {
       .addOptions(
         { label: '+1 Bonus Entry — 3 PT', description: 'Add 1 entry for 3 Power Tokens', value: 'token_1', emoji: '💠' },
         { label: '+3 Bonus Entries — 10 PT', description: 'Add 3 entries for 10 Power Tokens', value: 'token_3', emoji: '⚡' },
-        { label: 'Spider-Man Power — FREE', description: '+1 entry • once every 24 hours', value: 'spider_man', emoji: '🕷️' }
+        { label: 'Spider-Man Power — FREE', description: '+1 entry • once every 24 hours', value: 'spider_man', emoji: '🕷️' },
+        { label: 'Auto Claim Power — 5 PT', description: 'If you win, your automatic ticket starts claimed', value: 'auto_claim', emoji: '⚡' }
       )
   );
   return [actions, boosts];
@@ -97,6 +98,7 @@ function giveawayEmbed(g) {
       '🎟️ **+1 Bonus Entry** — `3 PT`',
       '⚡ **+3 Bonus Entries** — `10 PT`',
       '🕷️ **Spider-Man Power** — `FREE` • +1 entry every 24 hours',
+      '⚡ **Auto Claim Power** — `5 PT` • your automatic winner ticket starts claimed',
       '',
       '*Enter first, then choose below. Only one paid boost may be used per giveaway.*'
     ].join('\n'),
@@ -307,7 +309,8 @@ async function createWinnerTicket(guild, g, winnerId) {
   if (!member) return null;
   const host = await guild.members.fetch(g.hosted_by).catch(() => null);
   const minutes = await claimMinutes(member);
-  const automatic = autoClaim(member);
+  const paidAutoClaim = Boolean(db.prepare('SELECT 1 FROM giveaway_auto_claim_purchases WHERE giveaway_id=? AND user_id=?').get(g.id, winnerId));
+  const automatic = autoClaim(member) || paidAutoClaim;
   const deadline = Date.now() + minutes * 60_000;
   db.prepare(`INSERT OR REPLACE INTO giveaway_claims
     (giveaway_id,guild_id,winner_id,host_id,deadline_at,claimed,auto_claimed,resolved,created_at)
@@ -419,13 +422,16 @@ async function endGiveaway(client, id, { reroll = false } = {}) {
   if (!reroll) await applyFriendlyNeighborhoodRefunds(g, winners, client);
   const text = winners.length ? winners.map(userId => `<@${userId}>`).join(', ') : `No eligible entries with the **${REQUIRED_SERVER_TAG}** server tag.`;
   if (channel) {
-    await channel.send({ embeds: [successEmbed(reroll ? 'Giveaway Rerolled!' : 'Giveaway Ended!', `**${g.prize}**\n**Winner(s):** ${text}\nThe host will award this prize manually.`)] });
+    await channel.send({ embeds: [successEmbed(reroll ? 'Giveaway Rerolled!' : 'Giveaway Ended!', `**${g.prize}**\n**Winner(s):** ${text}\nAn automatic private winner ticket is being created now.`)] });
     if (g.message_id) {
       const message = await channel.messages.fetch(g.message_id).catch(() => null);
       if (message) await message.edit({ embeds: [giveawayEmbed(g).setTitle(`[ENDED] ${g.prize}`)], components: [] }).catch(() => {});
     }
   }
-  // Prize fulfillment is manual. No automatic claim ticket or token reward is created.
+  // Always create the private automatic winner ticket. Auto-claim powers only skip the Claim button.
+  for (const winnerId of winners) {
+    await createWinnerTicket(guild, g, winnerId).catch(error => console.error('[giveaway] auto ticket failed:', error));
+  }
   await sendLog(guild, 'log_channel_mod', { title: reroll ? 'Giveaway Rerolled' : 'Giveaway Ended', description: `${g.prize} • ${text}` });
   return winners;
 }
@@ -539,6 +545,20 @@ async function handleInteraction(i, client) {
       return i.reply({ embeds: [successEmbed('Spider-Man Activated!', `🕷️ **+1 bonus entry** added to **${g.prize}**.
 
 You now have **${entry.entries + 1} entries**. Your power recharges in 24 hours.`)], ephemeral: true });
+    }
+
+    if (choice === 'auto_claim') {
+      if (db.prepare('SELECT 1 FROM giveaway_auto_claim_purchases WHERE giveaway_id=? AND user_id=?').get(id, i.user.id)) {
+        return i.reply({ embeds: [infoEmbed('Auto Claim Already Active', 'Your automatic winner ticket will already begin claimed if you win this giveaway.')], ephemeral: true });
+      }
+      if (!eco.spend(i.guild.id, i.user.id, 5, `Giveaway #${id} auto claim power`, i.user.id)) {
+        return i.reply({ embeds: [errorEmbed('Not Enough Power Tokens', `Auto Claim costs **5 PT**. Your balance is **${eco.bal(i.guild.id, i.user.id)} PT**.`)], ephemeral: true });
+      }
+      db.prepare('INSERT INTO giveaway_auto_claim_purchases(giveaway_id,guild_id,user_id,tokens_spent,created_at) VALUES(?,?,?,?,?)')
+        .run(id, i.guild.id, i.user.id, 5, Date.now());
+      return i.reply({ embeds: [successEmbed('Auto Claim Armed!', `⚡ If you win **${g.prize}**, DripCore will still create your private ticket automatically—and it will begin already claimed.
+
+**Cost:** 5 PT • **Balance:** ${eco.bal(i.guild.id, i.user.id)} PT`)], ephemeral: true });
     }
 
     const boostOptions = {
