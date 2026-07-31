@@ -36,10 +36,9 @@ function entryComponents(g) {
       .setCustomId(`giveaway_boostselect:${g.id}`)
       .setPlaceholder('💠 Choose an entry boost')
       .addOptions(
-        { label: '+1 Bonus Entry', description: 'Spend 1 Power Token', value: 'token_1', emoji: '💠' },
-        { label: '+3 Bonus Entries', description: 'Spend 3 Power Tokens', value: 'token_3', emoji: '⚡' },
-        { label: '+5 Bonus Entries', description: 'Spend 5 Power Tokens', value: 'token_5', emoji: '🌌' },
-        { label: 'Spider-Man Power', description: '+1 entry free • once every 24 hours', value: 'spider_man', emoji: '🕷️' }
+        { label: '+1 Bonus Entry — 3 PT', description: 'Add 1 entry for 3 Power Tokens', value: 'token_1', emoji: '💠' },
+        { label: '+3 Bonus Entries — 10 PT', description: 'Add 3 entries for 10 Power Tokens', value: 'token_3', emoji: '⚡' },
+        { label: 'Spider-Man Power — FREE', description: '+1 entry • once every 24 hours', value: 'spider_man', emoji: '🕷️' }
       )
   );
   return [actions, boosts];
@@ -92,7 +91,17 @@ function giveawayEmbed(g) {
     embed.addFields({ name: '✨ Bonus Entries', value: 'No bonus-entry roles are configured.', inline: false });
   }
 
-  embed.addFields({ name: '💠 Multiverse Entry Boosts', value: 'After entering, use the select menu to choose **+1, +3, or +5 entries** with Power Tokens—or activate **Spider-Man** for a free +1 entry once every 24 hours. One paid boost per giveaway.', inline: false });
+  embed.addFields({
+    name: '💠 Entry Boost Menu',
+    value: [
+      '🎟️ **+1 Bonus Entry** — `3 PT`',
+      '⚡ **+3 Bonus Entries** — `10 PT`',
+      '🕷️ **Spider-Man Power** — `FREE` • +1 entry every 24 hours',
+      '',
+      '*Enter first, then choose below. Only one paid boost may be used per giveaway.*'
+    ].join('\n'),
+    inline: false
+  });
 
   const boosterRole = getConfig(g.guild_id, 'giveaway_booster_role');
   embed.addFields({
@@ -532,22 +541,26 @@ async function handleInteraction(i, client) {
 You now have **${entry.entries + 1} entries**. Your power recharges in 24 hours.`)], ephemeral: true });
     }
 
-    const amount = Number(String(choice || '').replace('token_', ''));
-    if (![1, 3, 5].includes(amount)) return i.reply({ embeds: [errorEmbed('Invalid Boost', 'Choose a valid entry boost from the menu.')], ephemeral: true });
+    const boostOptions = {
+      token_1: { entries: 1, cost: 3 },
+      token_3: { entries: 3, cost: 10 }
+    };
+    const boost = boostOptions[choice];
+    if (!boost) return i.reply({ embeds: [errorEmbed('Invalid Boost', 'Choose either **+1 entry for 3 PT** or **+3 entries for 10 PT**.')], ephemeral: true });
     if (db.prepare('SELECT 1 FROM giveaway_token_boosts WHERE giveaway_id=? AND user_id=?').get(id, i.user.id)) {
       return i.reply({ embeds: [infoEmbed('Paid Boost Already Used', 'You can choose only one paid Power Token boost per giveaway.')], ephemeral: true });
     }
-    if (!eco.spend(i.guild.id, i.user.id, amount, `Giveaway #${id} +${amount} entries`, i.user.id)) {
-      return i.reply({ embeds: [errorEmbed('Not Enough Power Tokens', `This boost costs **${amount} PT**. Your balance is **${eco.bal(i.guild.id, i.user.id)} PT**.`)], ephemeral: true });
+    if (!eco.spend(i.guild.id, i.user.id, boost.cost, `Giveaway #${id} +${boost.entries} entries`, i.user.id)) {
+      return i.reply({ embeds: [errorEmbed('Not Enough Power Tokens', `The **+${boost.entries} entry** boost costs **${boost.cost} PT**. Your balance is **${eco.bal(i.guild.id, i.user.id)} PT**.`)], ephemeral: true });
     }
     db.transaction(() => {
-      db.prepare('UPDATE giveaway_entries SET entries=entries+? WHERE giveaway_id=? AND user_id=?').run(amount, id, i.user.id);
-      db.prepare('INSERT INTO giveaway_token_boosts(giveaway_id,guild_id,user_id,tokens_spent,created_at) VALUES(?,?,?,?,?)').run(id, i.guild.id, i.user.id, amount, Date.now());
+      db.prepare('UPDATE giveaway_entries SET entries=entries+? WHERE giveaway_id=? AND user_id=?').run(boost.entries, id, i.user.id);
+      db.prepare('INSERT INTO giveaway_token_boosts(giveaway_id,guild_id,user_id,tokens_spent,created_at) VALUES(?,?,?,?,?)').run(id, i.guild.id, i.user.id, boost.cost, Date.now());
     })();
     await refreshGiveawayMessage(client, g);
-    return i.reply({ embeds: [successEmbed('Multiverse Boost Applied!', `💠 **+${amount} entries** added to **${g.prize}**.
+    return i.reply({ embeds: [successEmbed('Multiverse Boost Applied!', `💠 **+${boost.entries} ${boost.entries === 1 ? 'entry' : 'entries'}** added to **${g.prize}** for **${boost.cost} PT**.
 
-**Entries:** ${entry.entries + amount}
+**Entries:** ${entry.entries + boost.entries}
 **Balance:** ${eco.bal(i.guild.id, i.user.id)} PT
 
 Friendly Neighborhood may refund the spent tokens if you lose, up to its daily limit.`)], ephemeral: true });
