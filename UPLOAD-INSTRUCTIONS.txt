@@ -1,18 +1,17 @@
-DRIPCORE GIVEAWAY BOOST PRICES UPDATE
+DRIPCORE TOURNAMENT — REMOVE POWER TOKEN BOOSTS
 
-Changes included:
-- Giveaway boost menu now allows only:
-  • +1 bonus entry for 3 Power Tokens
-  • +3 bonus entries for 10 Power Tokens
-  • Spider-Man passive for a free +1 entry once every 24 hours
-- Removed the +5 entry option.
-- Giveaway embeds now clearly display each boost and its price.
-- Token charges, entry increases, insufficient-balance messages, transaction history, and leave refunds use the new prices correctly.
-
-INSTALLATION
-1. Upload the included src folder to the root of your bot repository.
+1. Upload the included src folder into the root of your bot repository.
 2. Replace the matching file when prompted:
-   src/handlers/giveawayHandler.js
+   src/handlers/tournamentHandler.js
 3. Restart/redeploy the bot.
 
-No database migration or slash-command redeployment is required for this update.
+No database migration or slash-command redeployment is required.
+
+CHANGES
+- Removed the tournament Power Token boost select menu.
+- Players can no longer buy +1, +3, or +5 tournament starting points.
+- Removed Power Token boost information from tournament embeds.
+- Updated tournament join and leave messages.
+- Tournament powers can still be added later for individual games.
+
+Existing historical token bonus points remain in the database and continue to count on old tournaments; this update only prevents new purchases.
