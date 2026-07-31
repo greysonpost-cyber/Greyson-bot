@@ -1,31 +1,42 @@
-DRIPCORE AUTOMATIC TOKEN DROPS UPDATE
-=====================================
+DRIPCORE COLLECTION ROLE REWARDS PATCH
+======================================
 
-WHAT THIS ADDS
-- A random drop appears every 10 minutes.
-- Each drop contains 1, 2, or 3 Power Tokens.
-- The first member to click the claim button wins.
-- The claim button expires after 15 seconds.
-- Claimed tokens are added directly to the winner's balance and ledger.
-- Duplicate claims are blocked with an atomic database transaction.
-- Active drops are safely expired after a restart.
-
-INSTALL
-1. Upload the included src folder into the root of your bot repository.
+1. Upload the included src folder into the root of your current repository.
 2. Replace the matching files when prompted.
 3. Run: npm run deploy
 4. Restart/redeploy the bot.
 
-CHANNEL SETUP
-The bot first uses the configured Automatic Token Drops Channel.
-Run:
-/config set-channel key:Automatic Token Drops Channel channel:#general
+The database table is created automatically when the bot starts.
 
-If this is not configured, the bot automatically looks for a text channel named
-#general, then another channel containing "general", then the server system channel.
+SET UP THE SPIDER-VERSE REWARD
+------------------------------
+Use:
 
-NOTES
-- The first drop is scheduled for about 10 minutes after the update starts.
-- The database tables are created automatically.
-- The bot needs View Channel, Send Messages, Embed Links, and Read Message History
-  permissions in the selected channel.
+/collection reward set
+collection: Spider-Verse
+role: @Your Collection Role
+remove_if_incomplete: Yes
+
+The bot immediately checks existing owners. After setup, it automatically
+checks both the old and new owner whenever an artifact is transferred, bought,
+or traded.
+
+OTHER COMMANDS
+--------------
+/collection reward view
+/collection reward sync collection:Spider-Verse
+/collection reward remove collection:Spider-Verse
+
+HOW COMPLETION WORKS
+--------------------
+A member must own at least one copy of every artifact TYPE in the collection.
+For Spider-Verse, that means one Spider-Man, one Web Slinger, and one Friendly
+Neighborhood. Owning duplicate copies does not replace a missing artifact type.
+
+By default, the reward role is removed if the member later loses part of the
+collection. Set remove_if_incomplete to No to make the role permanent once earned.
+
+BOT PERMISSIONS
+---------------
+The bot needs Manage Roles, and its highest role must be above the configured
+collection reward role.

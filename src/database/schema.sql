@@ -378,3 +378,14 @@ CREATE TABLE IF NOT EXISTS token_drops (
     claimed_at INTEGER
 );
 CREATE INDEX IF NOT EXISTS idx_token_drops_active ON token_drops(status, expires_at);
+
+-- Automatic Discord role rewards for completing artifact collections.
+CREATE TABLE IF NOT EXISTS collection_rewards (
+  guild_id TEXT NOT NULL,
+  collection_name TEXT NOT NULL,
+  role_id TEXT NOT NULL,
+  remove_if_incomplete INTEGER NOT NULL DEFAULT 1,
+  created_by TEXT NOT NULL,
+  created_at INTEGER NOT NULL,
+  PRIMARY KEY(guild_id, collection_name)
+);
