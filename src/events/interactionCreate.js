@@ -58,7 +58,7 @@ module.exports = {
             if (customId.startsWith('econ_')) return economyHandler.handle(interaction, client);
             if (customId.startsWith('minireact:')) {
                 const parts = customId.split(':');
-                const reward = economy.rewardGame(interaction.guild.id, interaction.user.id, 2);
+                const reward = economy.rewardGame(interaction.guild.id, interaction.user.id, Math.floor(Math.random() * 5) + 1);
                 await interaction.update({ content: `⚡ ${interaction.user} was fastest! ${reward ? `They earned **${reward} PT**.` : `They reached today's minigame cap.`}`, components: [] });
                 return;
             }

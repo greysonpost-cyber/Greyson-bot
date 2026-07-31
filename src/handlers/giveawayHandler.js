@@ -419,13 +419,13 @@ async function endGiveaway(client, id, { reroll = false } = {}) {
   if (!reroll) await applyFriendlyNeighborhoodRefunds(g, winners, client);
   const text = winners.length ? winners.map(userId => `<@${userId}>`).join(', ') : `No eligible entries with the **${REQUIRED_SERVER_TAG}** server tag.`;
   if (channel) {
-    await channel.send({ embeds: [successEmbed(reroll ? 'Giveaway Rerolled!' : 'Giveaway Ended!', `**${g.prize}**\n**Winner(s):** ${text}\nAutomatic claim tickets were created.`)] });
+    await channel.send({ embeds: [successEmbed(reroll ? 'Giveaway Rerolled!' : 'Giveaway Ended!', `**${g.prize}**\n**Winner(s):** ${text}\nThe host will award this prize manually.`)] });
     if (g.message_id) {
       const message = await channel.messages.fetch(g.message_id).catch(() => null);
       if (message) await message.edit({ embeds: [giveawayEmbed(g).setTitle(`[ENDED] ${g.prize}`)], components: [] }).catch(() => {});
     }
   }
-  for (const winner of winners) await createWinnerTicket(guild, g, winner);
+  // Prize fulfillment is manual. No automatic claim ticket or token reward is created.
   await sendLog(guild, 'log_channel_mod', { title: reroll ? 'Giveaway Rerolled' : 'Giveaway Ended', description: `${g.prize} • ${text}` });
   return winners;
 }

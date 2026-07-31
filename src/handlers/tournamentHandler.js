@@ -8,10 +8,12 @@ const {
   PermissionFlagsBits,
   TextInputBuilder,
   TextInputStyle,
+  StringSelectMenuBuilder,
 } = require('discord.js');
 const db = require('../database/db');
 const { getConfig, setConfig } = require('../utils/config');
 const { successEmbed, errorEmbed, infoEmbed } = require('../utils/embeds');
+const eco = require('../services/economy');
 
 const GAMES = [
   '🔪 Murder Mystery 2',
@@ -36,6 +38,39 @@ const q = {
 
 const activeSubmissionCollectors = new Map();
 
+const POWER_COSTS = { shield: 10, double_points: 5 };
+function selectedPower(tournamentId, roundNumber, userId) {
+  return db.prepare('SELECT * FROM tournament_round_powers WHERE tournament_id=? AND round_number=? AND user_id=?').get(tournamentId, roundNumber, userId);
+}
+function doubledPoints(t, userId, points) {
+  const power = selectedPower(t.id, t.current_round, userId);
+  return power?.power_key === 'double_points' ? points * 2 : points;
+}
+function consumeShield(tournamentId, roundNumber, userId) {
+  const power = selectedPower(tournamentId, roundNumber, userId);
+  if (power?.power_key !== 'shield' || power.consumed) return false;
+  db.prepare('UPDATE tournament_round_powers SET consumed=1 WHERE tournament_id=? AND round_number=? AND user_id=?').run(tournamentId, roundNumber, userId);
+  return true;
+}
+async function selectPower(interaction, t, choice) {
+  if (t.status !== 'active' || t.current_round < 1 || t.current_round > 4) return interaction.reply({ content: '❌ Powers are available only during tournament rounds 1–4.', ephemeral: true });
+  if (!t.power_selection_open || t.round_started) return interaction.reply({ content: '❌ Power selection is closed. Powers must be picked before the game starts.', ephemeral: true });
+  const player = q.player.get(t.id, interaction.user.id);
+  if (!player?.active) return interaction.reply({ content: '❌ Only active tournament participants can choose a power.', ephemeral: true });
+  if (!POWER_COSTS[choice]) return interaction.reply({ content: '❌ Choose Shield or Double Points.', ephemeral: true });
+  if (selectedPower(t.id, t.current_round, interaction.user.id)) return interaction.reply({ content: '❌ You already selected your one power for this round.', ephemeral: true });
+  const cost = POWER_COSTS[choice];
+  if (!eco.spend(interaction.guild.id, interaction.user.id, cost, `Tournament #${t.id} round ${t.current_round} ${choice}`, interaction.user.id)) {
+    return interaction.reply({ content: `❌ **${choice === 'shield' ? 'Shield' : 'Double Points'}** costs **${cost} PT**. Your balance is **${eco.bal(interaction.guild.id, interaction.user.id)} PT**.`, ephemeral: true });
+  }
+  db.prepare(`INSERT INTO tournament_round_powers(tournament_id,guild_id,round_number,user_id,power_key,tokens_spent,consumed,selected_at) VALUES(?,?,?,?,?,?,0,?)`).run(t.id, interaction.guild.id, t.current_round, interaction.user.id, choice, cost, Date.now());
+  const text = choice === 'shield' ? '🛡️ **Shield selected.** It blocks one elimination/removal during this round.' : '✖️ **Double Points selected.** Points awarded to you in this round are doubled.';
+  return interaction.reply({ embeds: [successEmbed('Round Power Locked In', `${text}
+
+Only you can see this confirmation. **${cost} PT** was spent.
+Balance: **${eco.bal(interaction.guild.id, interaction.user.id)} PT**`)], ephemeral: true });
+}
+
 function score(p) {
   return Number(p.contribution_points || 0) + Number(p.token_bonus_points || 0) + Number(p.round1_points || 0) + Number(p.round2_points || 0) + Number(p.round3_points || 0) + Number(p.round4_points || 0);
 }
@@ -54,6 +89,7 @@ function safeName(value) {
 function stageLabel(t) {
   if (t.status === 'registration') return 'Registration Open';
   if (t.status === 'finished') return 'Finished';
+  if (t.power_selection_open && !t.round_started) return `Round ${t.current_round} Power Selection`;
   return `Round ${t.current_round}: ${GAMES[Math.max(0, t.current_round - 1)]}`;
 }
 
@@ -76,21 +112,33 @@ function panelEmbed(t, players) {
     .addFields(
       { name: '🎮 MULTIVERSE ROUNDS', value: games, inline: true },
       { name: '📊 LIVE STANDINGS', value: top, inline: true },
-      { name: '✨ CONTRIBUTION BONUS', value: 'Prize-pool contributors may receive **0–5 additional starting points** from Tournament Managers.', inline: false },
+      { name: '⚡ ROUND POWERS', value: t.status === 'active' && t.current_round <= 4 ? (t.power_selection_open && !t.round_started ? 'Choose **one** before the game starts:\n🛡️ Shield — **10 PT**\n✖️ Double Points — **5 PT**' : 'Power selection is locked for this round.') : 'Round powers appear during rounds 1–4.', inline: false },
+      { name: '🏅 AUTOMATIC TOKEN PRIZES', value: '🥇 1st: **15 PT** • 🥈 2nd: **10 PT** • 🥉 3rd: **5 PT**', inline: false },
     )
     .setFooter({ text: `Tournament #${t.id} • Only one champion survives the multiverse` })
     .setTimestamp();
 }
 
 function panelComponents(t) {
-  if (t.status !== 'registration') return [];
-  return [
-    new ActionRowBuilder().addComponents(
+  if (t.status === 'registration') {
+    return [new ActionRowBuilder().addComponents(
       new ButtonBuilder().setCustomId(`tournament_join_${t.id}`).setLabel('Enter Arena').setEmoji('🏆').setStyle(ButtonStyle.Success),
       new ButtonBuilder().setCustomId(`tournament_participants_${t.id}`).setLabel('View Challengers').setEmoji('👥').setStyle(ButtonStyle.Primary),
       new ButtonBuilder().setCustomId(`tournament_leave_${t.id}`).setLabel('Leave Arena').setEmoji('🚪').setStyle(ButtonStyle.Secondary),
-    ),
-  ];
+    )];
+  }
+  if (t.status === 'active' && t.current_round >= 1 && t.current_round <= 4 && t.power_selection_open && !t.round_started) {
+    return [new ActionRowBuilder().addComponents(
+      new StringSelectMenuBuilder()
+        .setCustomId(`tournament_powerselect_${t.id}`)
+        .setPlaceholder('⚡ Pick one power before the round starts')
+        .addOptions(
+          { label: 'Shield — 10 PT', description: 'Blocks one elimination/removal this round', value: 'shield', emoji: '🛡️' },
+          { label: 'Double Points — 5 PT', description: 'Doubles points awarded this round', value: 'double_points', emoji: '✖️' },
+        ),
+    )];
+  }
+  return [];
 }
 
 async function renderBoard(guild, t, players) {
@@ -157,7 +205,7 @@ async function updatePanel(client, t) {
 
 async function handleCommand(interaction, client) {
   const sub = interaction.options.getSubcommand();
-  const publicSubs = new Set(['leaderboard', 'participants', 'vote-dti']);
+  const publicSubs = new Set(['leaderboard', 'participants', 'vote-dti', 'power']);
   if (!publicSubs.has(sub) && !canManage(interaction)) {
     return interaction.reply({ content: '❌ Only tournament managers or server administrators can use this.', ephemeral: true });
   }
@@ -196,28 +244,48 @@ async function handleCommand(interaction, client) {
 
   if (!t) return interaction.reply({ content: '❌ There is no tournament configured.', ephemeral: true });
 
+  if (sub === 'power') return selectPower(interaction, t, interaction.options.getString('choice'));
+
   if (sub === 'start') {
     const count = q.count.get(t.id).c;
     if (count < 2) return interaction.reply({ content: '❌ At least 2 players must register.', ephemeral: true });
-    db.prepare(`UPDATE tournaments SET status='active', current_round=1, started_at=? WHERE id=?`).run(Date.now(), t.id);
+    db.prepare(`UPDATE tournaments SET status='active', current_round=1, power_selection_open=1, round_started=0, started_at=? WHERE id=?`).run(Date.now(), t.id);
     db.prepare(`UPDATE tournament_players SET seed_key=lower(hex(randomblob(16))) WHERE tournament_id=?`).run(t.id);
+    t = q.byId.get(t.id);
+    await interaction.reply({ content: `⚡ **${t.name} — Round 1 power selection is open!**
+Players may pick **one** power before the game begins:
+🛡️ Shield — 10 PT
+✖️ Double Points — 5 PT
+
+A Tournament Manager must use \`/tournament begin-round\` to lock powers and begin ${GAMES[0]}.` });
+    return updatePanel(client, t);
+  }
+
+  if (sub === 'begin-round') {
+    if (t.status !== 'active' || t.current_round < 1 || t.current_round > 5) return interaction.reply({ content: '❌ There is no round ready to begin.', ephemeral: true });
+    if (t.round_started) return interaction.reply({ content: '❌ This round has already started.', ephemeral: true });
+    db.prepare('UPDATE tournaments SET power_selection_open=0, round_started=1 WHERE id=?').run(t.id);
     t = q.byId.get(t.id);
     const players = q.players.all(t.id);
     const board = await renderBoard(interaction.guild, t, players);
-    await interaction.reply({ content: `🏆 **${t.name} has started!**\nRound 1: ${GAMES[0]}`, files: [board] });
+    await interaction.reply({ content: `▶️ **Round ${t.current_round} has started: ${GAMES[t.current_round - 1]}**
+Power selections are now locked.`, files: [board] });
     return updatePanel(client, t);
   }
 
   if (sub === 'report-mm2') {
-    if (t.status !== 'active' || t.current_round !== 1) return interaction.reply({ content: '❌ MM2 results can only be reported during Round 1.', ephemeral: true });
+    if (t.status !== 'active' || t.current_round !== 1 || !t.round_started) return interaction.reply({ content: '❌ MM2 results can only be reported during Round 1.', ephemeral: true });
     const winner = interaction.options.getUser('winner');
     const loser = interaction.options.getUser('loser');
     if (winner.id === loser.id) return interaction.reply({ content: '❌ Winner and loser must be different players.', ephemeral: true });
     const wp = q.player.get(t.id, winner.id);
     const lp = q.player.get(t.id, loser.id);
     if (!wp?.active || !lp?.active) return interaction.reply({ content: '❌ Both users must be active tournament participants.', ephemeral: true });
-    const winnerPoints = interaction.options.getInteger('winner_points') ?? 10;
-    const loserPoints = interaction.options.getInteger('loser_points') ?? 1;
+    const baseWinnerPoints = interaction.options.getInteger('winner_points') ?? 10;
+    const baseLoserPoints = interaction.options.getInteger('loser_points') ?? 1;
+    const winnerPoints = doubledPoints(t, winner.id, baseWinnerPoints);
+    const loserPoints = doubledPoints(t, loser.id, baseLoserPoints);
+    const shieldUsed = consumeShield(t.id, 1, loser.id);
     const notes = interaction.options.getString('notes');
     const tx = db.transaction(() => {
       db.prepare(`UPDATE tournament_players SET round1_points=? WHERE tournament_id=? AND user_id=?`).run(winnerPoints, t.id, winner.id);
@@ -227,12 +295,12 @@ async function handleCommand(interaction, client) {
     tx();
     await interaction.reply({ content: `✅ MM2 result saved by a Tournament Manager.
 Winner: ${winner} — **${winnerPoints} pts**
-Loser: ${loser} — **${loserPoints} pts**`, ephemeral: true });
+Loser: ${loser} — **${loserPoints} pts**${shieldUsed ? '\n🛡️ Their Shield was consumed and protected them from elimination.' : ''}`, ephemeral: true });
     return updatePanel(client, q.byId.get(t.id));
   }
 
   if (sub === 'open-dti') {
-    if (t.status !== 'active' || t.current_round !== 2) return interaction.reply({ content: '❌ Dress to Impress submissions can only open during Round 2.', ephemeral: true });
+    if (t.status !== 'active' || t.current_round !== 2 || !t.round_started) return interaction.reply({ content: '❌ Dress to Impress submissions can only open during Round 2.', ephemeral: true });
     const theme = interaction.options.getString('theme');
     const minutes = interaction.options.getInteger('minutes');
     const deadline = Date.now() + minutes * 60_000;
@@ -257,7 +325,7 @@ Loser: ${loser} — **${loserPoints} pts**`, ephemeral: true });
   }
 
   if (sub === 'open-dti-voting') {
-    if (t.status !== 'active' || t.current_round !== 2) return interaction.reply({ content: '❌ DTI voting can only open during Round 2.', ephemeral: true });
+    if (t.status !== 'active' || t.current_round !== 2 || !t.round_started) return interaction.reply({ content: '❌ DTI voting can only open during Round 2.', ephemeral: true });
     const state = q.roundState.get(t.id, 2);
     if (!state?.submission_deadline) return interaction.reply({ content: '❌ Open submissions first.', ephemeral: true });
     if (Date.now() < state.submission_deadline) return interaction.reply({ content: `❌ Submissions are still open until <t:${Math.floor(state.submission_deadline / 1000)}:F>.`, ephemeral: true });
@@ -277,7 +345,7 @@ Use \`/tournament vote-dti submission:<number>\`. Votes are saved privately and 
   }
 
   if (sub === 'vote-dti') {
-    if (t.status !== 'active' || t.current_round !== 2) return interaction.reply({ content: '❌ DTI voting is not active.', ephemeral: true });
+    if (t.status !== 'active' || t.current_round !== 2 || !t.round_started) return interaction.reply({ content: '❌ DTI voting is not active.', ephemeral: true });
     const player = q.player.get(t.id, interaction.user.id);
     if (!player?.active) return interaction.reply({ content: '❌ Only active tournament participants may vote.', ephemeral: true });
     const state = q.roundState.get(t.id, 2);
@@ -304,9 +372,9 @@ Use \`force:true\` only for unavailable, removed, or disqualified players.`, eph
     db.prepare(`UPDATE tournament_round_state SET voting_open=0,voting_closed=1 WHERE tournament_id=? AND round_number=2`).run(t.id);
     const results = db.prepare(`SELECT s.id,s.user_id,COUNT(v.submission_id) votes FROM tournament_submissions s LEFT JOIN tournament_votes v ON v.submission_id=s.id AND v.tournament_id=s.tournament_id AND v.round_number=2 WHERE s.tournament_id=? AND s.round_number=2 GROUP BY s.id ORDER BY votes DESC,s.submitted_at ASC`).all(t.id);
     const pointScale = [10, 8, 6, 4];
-    const tx = db.transaction(() => results.forEach((r, i) => db.prepare(`UPDATE tournament_players SET round2_points=? WHERE tournament_id=? AND user_id=?`).run(pointScale[i] ?? 1, t.id, r.user_id)));
+    const tx = db.transaction(() => results.forEach((r, i) => db.prepare(`UPDATE tournament_players SET round2_points=? WHERE tournament_id=? AND user_id=?`).run(doubledPoints(t, r.user_id, pointScale[i] ?? 1), t.id, r.user_id)));
     tx();
-    const lines = results.map((r, i) => `**${i + 1}.** <@${r.user_id}> — **${r.votes} votes** — **${pointScale[i] ?? 1} pts**`).join('\n');
+    const lines = results.map((r, i) => `**${i + 1}.** <@${r.user_id}> — **${r.votes} votes** — **${doubledPoints(t, r.user_id, pointScale[i] ?? 1)} pts**`).join('\n');
     await interaction.reply({ content: `✅ **DTI voting closed${force && missing.length ? ' with manager override' : ''}.**
 Individual voters remain private.
 
@@ -319,7 +387,8 @@ ${lines}` });
     const user = interaction.options.getUser('user');
     const p = q.player.get(t.id, user.id);
     if (!p || !p.active) return interaction.reply({ content: '❌ That user is not an active participant.', ephemeral: true });
-    const points = interaction.options.getInteger('points');
+    const basePoints = interaction.options.getInteger('points');
+    const points = doubledPoints(t, user.id, basePoints);
     const col = `round${t.current_round}_points`;
     db.prepare(`UPDATE tournament_players SET ${col}=? WHERE tournament_id=? AND user_id=?`).run(points, t.id, user.id);
     const note = interaction.options.getString('note');
@@ -340,9 +409,10 @@ ${lines}` });
 
   if (sub === 'next-round') {
     if (t.status !== 'active') return interaction.reply({ content: '❌ The tournament is not active.', ephemeral: true });
+    if (!t.round_started) return interaction.reply({ content: '❌ Begin the current round before advancing.', ephemeral: true });
     if (t.current_round >= 5) return interaction.reply({ content: '❌ You are already at the Grand Finale.', ephemeral: true });
     const next = t.current_round + 1;
-    db.prepare(`UPDATE tournaments SET current_round=? WHERE id=?`).run(next, t.id);
+    db.prepare(`UPDATE tournaments SET current_round=?, power_selection_open=?, round_started=0 WHERE id=?`).run(next, next <= 4 ? 1 : 0, t.id);
     t = q.byId.get(t.id);
     const players = q.players.all(t.id);
     if (next === 5) {
@@ -353,7 +423,7 @@ ${lines}` });
       await interaction.reply({ content: `👑 **GRAND FINALE**\n<@${t.finalist1_id}> vs <@${t.finalist2_id}>\nThe final challenge can be announced later.`, files: [board] });
     } else {
       const board = await renderBoard(interaction.guild, t, players);
-      await interaction.reply({ content: `▶️ Round ${next} has started: **${GAMES[next - 1]}**`, files: [board] });
+      await interaction.reply({ content: `⚡ **Round ${next} power selection is open.** Players may choose one power before **${GAMES[next - 1]}** starts. Use \`/tournament begin-round\` when ready.`, files: [board] });
     }
     return updatePanel(client, t);
   }
@@ -372,6 +442,10 @@ ${lines}` });
 
   if (sub === 'remove') {
     const user = interaction.options.getUser('user');
+    if (t.status === 'active' && t.current_round <= 4 && consumeShield(t.id, t.current_round, user.id)) {
+      await interaction.reply({ content: `🛡️ ${user}'s Shield blocked this removal and has now been consumed.`, ephemeral: true });
+      return updatePanel(client, q.byId.get(t.id));
+    }
     db.prepare(`UPDATE tournament_players SET active=0 WHERE tournament_id=? AND user_id=?`).run(t.id, user.id);
     const member = await interaction.guild.members.fetch(user.id).catch(() => null);
     if (member && t.participant_role_id) await member.roles.remove(t.participant_role_id).catch(() => {});
@@ -385,10 +459,25 @@ ${lines}` });
     const finalistIds = [t.finalist1_id, t.finalist2_id].filter(Boolean);
     if (finalistIds.length === 2 && !finalistIds.includes(winner.id)) return interaction.reply({ content: '❌ The selected winner must be one of the two Grand Finalists.', ephemeral: true });
     const championId = winner.id;
-    db.prepare(`UPDATE tournaments SET status='finished', champion_id=?, ended_at=? WHERE id=?`).run(championId || null, Date.now(), t.id);
+    db.prepare(`UPDATE tournaments SET status='finished', champion_id=?, power_selection_open=0, round_started=1, ended_at=? WHERE id=?`).run(championId || null, Date.now(), t.id);
     t = q.byId.get(t.id);
+    const secondId = finalistIds.find(id => id !== championId) || players.find(p => p.user_id !== championId)?.user_id || null;
+    const thirdId = players.find(p => p.user_id !== championId && p.user_id !== secondId)?.user_id || null;
+    const placements = [[championId, 1, 15], [secondId, 2, 10], [thirdId, 3, 5]].filter(x => x[0]);
+    db.transaction(() => {
+      for (const [userId, place, tokens] of placements) {
+        if (db.prepare('SELECT 1 FROM tournament_placement_rewards WHERE tournament_id=? AND user_id=?').get(t.id, userId)) continue;
+        eco.add(guildId, userId, tokens, `Tournament #${t.id} placement reward`, 'SYSTEM');
+        db.prepare('INSERT INTO tournament_placement_rewards(tournament_id,guild_id,user_id,place,tokens_awarded,awarded_at) VALUES(?,?,?,?,?,?)').run(t.id, guildId, userId, place, tokens, Date.now());
+      }
+    })();
     const board = await renderBoard(interaction.guild, t, players);
-    await interaction.reply({ content: championId ? `🏆 **${t.name} is complete!**\nChampion: <@${championId}>` : `🏆 **${t.name} is complete!**`, files: [board] });
+    const rewardText = placements.map(([id, place, tokens]) => `${place === 1 ? '🥇' : place === 2 ? '🥈' : '🥉'} <@${id}> — **${tokens} PT**`).join('\n');
+    await interaction.reply({ content: `🏆 **${t.name} is complete!**
+
+${rewardText}
+
+Power Tokens were awarded automatically.`, files: [board] });
     return updatePanel(client, t);
   }
 
@@ -409,6 +498,8 @@ async function handleInteraction(interaction, client) {
   const id = Number(parts[2]);
   const t = q.byId.get(id);
   if (!t || t.status === 'deleted') return interaction.reply({ content: '❌ This tournament is no longer available.', ephemeral: true });
+
+  if (action === 'powerselect') return selectPower(interaction, t, interaction.values?.[0]);
 
   if (action === 'participants') {
     const players = q.players.all(t.id);
@@ -451,7 +542,7 @@ async function handleInteraction(interaction, client) {
   }
 
   if (action === 'dtisubmit') {
-    if (t.status !== 'active' || t.current_round !== 2) return interaction.reply({ content: '❌ Outfit submissions are not currently open.', ephemeral: true });
+    if (t.status !== 'active' || t.current_round !== 2 || !t.round_started) return interaction.reply({ content: '❌ Outfit submissions are not currently open.', ephemeral: true });
     const player = q.player.get(t.id, interaction.user.id);
     if (!player?.active) return interaction.reply({ content: '❌ Only active tournament participants may submit.', ephemeral: true });
     const state = q.roundState.get(t.id, 2);

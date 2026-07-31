@@ -18,6 +18,15 @@ module.exports = {
       .addChannelOption(o => o.setName('channel').setDescription('Channel for the live panel').addChannelTypes(ChannelType.GuildText, ChannelType.GuildAnnouncement))
       .addRoleOption(o => o.setName('participant_role').setDescription('Role given when a player joins')))
     .addSubcommand(sub => sub.setName('start').setDescription('Close registration and begin Round 1'))
+    .addSubcommand(sub => sub.setName('begin-round').setDescription('Lock powers and officially begin the current round'))
+    .addSubcommand(sub => sub
+      .setName('power')
+      .setDescription('Privately choose one power before the current round starts')
+      .addStringOption(o => o.setName('choice').setDescription('Round power').setRequired(true)
+        .addChoices(
+          { name: 'Shield — 10 PT', value: 'shield' },
+          { name: 'Double Points — 5 PT', value: 'double_points' },
+        )))
     .addSubcommand(sub => sub
       .setName('report-mm2')
       .setDescription('Manager-only: report an MM2 winner and loser')

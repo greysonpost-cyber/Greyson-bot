@@ -1,17 +1,25 @@
-DRIPCORE TOURNAMENT — REMOVE POWER TOKEN BOOSTS
+DRIPCORE TOKEN + TOURNAMENT POWERS UPDATE
 
-1. Upload the included src folder into the root of your bot repository.
-2. Replace the matching file when prompted:
-   src/handlers/tournamentHandler.js
-3. Restart/redeploy the bot.
+1. Upload the included src folder over your repository's existing src folder.
+2. Replace all matching files.
+3. Redeploy slash commands because /passive and /tournament gained new subcommands:
 
-No database migration or slash-command redeployment is required.
+   npm run deploy
 
-CHANGES
-- Removed the tournament Power Token boost select menu.
-- Players can no longer buy +1, +3, or +5 tournament starting points.
-- Removed Power Token boost information from tournament embeds.
-- Updated tournament join and leave messages.
-- Tournament powers can still be added later for individual games.
+4. Restart/redeploy the bot.
 
-Existing historical token bonus points remain in the database and continue to count on old tournaments; this update only prevents new purchases.
+WHAT CHANGED
+- /tokens daily now grants exactly 1 PT every 24 hours.
+- /passive web-slinger privately claims +1 PT every 24 hours for owners of Web Swing or Web Slinger.
+- Tournament rounds now open a private power-selection phase before each game.
+- Shield costs 10 PT and blocks one removal/elimination during that round.
+- Double Points costs 5 PT and doubles points awarded in that round.
+- Only one power may be chosen per round, and selection locks when a manager uses /tournament begin-round.
+- Tournament finish rewards are automatic: 1st 15 PT, 2nd 10 PT, 3rd 5 PT.
+- Giveaway winners are announced, but prizes are fulfilled manually; no automatic claim ticket is created.
+- Server minigame/event winners receive a random 1-5 PT, subject to the existing daily minigame cap.
+
+ROUND FLOW
+1. Manager uses /tournament start (or /tournament next-round).
+2. Players pick one power from the tournament panel or /tournament power.
+3. Manager uses /tournament begin-round to lock selections and start the game.

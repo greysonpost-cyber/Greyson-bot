@@ -335,3 +335,27 @@ CREATE TABLE IF NOT EXISTS tournament_token_boosts (
   created_at INTEGER NOT NULL,
   PRIMARY KEY(tournament_id,user_id)
 );
+
+
+-- Tournament round powers and automatic placement rewards
+CREATE TABLE IF NOT EXISTS tournament_round_powers (
+  tournament_id INTEGER NOT NULL,
+  guild_id TEXT NOT NULL,
+  round_number INTEGER NOT NULL,
+  user_id TEXT NOT NULL,
+  power_key TEXT NOT NULL,
+  tokens_spent INTEGER NOT NULL,
+  consumed INTEGER NOT NULL DEFAULT 0,
+  selected_at INTEGER NOT NULL,
+  PRIMARY KEY(tournament_id,round_number,user_id)
+);
+CREATE TABLE IF NOT EXISTS tournament_placement_rewards (
+  tournament_id INTEGER NOT NULL,
+  guild_id TEXT NOT NULL,
+  user_id TEXT NOT NULL,
+  place INTEGER NOT NULL,
+  tokens_awarded INTEGER NOT NULL,
+  awarded_at INTEGER NOT NULL,
+  PRIMARY KEY(tournament_id,user_id),
+  UNIQUE(tournament_id,place)
+);

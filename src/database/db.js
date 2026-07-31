@@ -91,6 +91,8 @@ ensureColumn('giveaway_claims', 'claimed', 'INTEGER NOT NULL DEFAULT 0');
 ensureColumn('giveaway_claims', 'auto_claimed', 'INTEGER NOT NULL DEFAULT 0');
 ensureColumn('giveaway_claims', 'created_at', 'INTEGER');
 ensureColumn('tournament_players', 'token_bonus_points', 'INTEGER NOT NULL DEFAULT 0');
+ensureColumn('tournaments', 'power_selection_open', 'INTEGER NOT NULL DEFAULT 0');
+ensureColumn('tournaments', 'round_started', 'INTEGER NOT NULL DEFAULT 0');
 
 db.exec(`CREATE TABLE IF NOT EXISTS giveaway_ticket_votes (
   claim_id INTEGER PRIMARY KEY,
@@ -101,6 +103,19 @@ db.exec(`CREATE TABLE IF NOT EXISTS giveaway_ticket_votes (
   transcript_sent INTEGER NOT NULL DEFAULT 0
 );`);
 
+
+
+db.exec(`CREATE TABLE IF NOT EXISTS tournament_round_powers (
+  tournament_id INTEGER NOT NULL, guild_id TEXT NOT NULL, round_number INTEGER NOT NULL,
+  user_id TEXT NOT NULL, power_key TEXT NOT NULL, tokens_spent INTEGER NOT NULL,
+  consumed INTEGER NOT NULL DEFAULT 0, selected_at INTEGER NOT NULL,
+  PRIMARY KEY(tournament_id,round_number,user_id)
+);
+CREATE TABLE IF NOT EXISTS tournament_placement_rewards (
+  tournament_id INTEGER NOT NULL, guild_id TEXT NOT NULL, user_id TEXT NOT NULL,
+  place INTEGER NOT NULL, tokens_awarded INTEGER NOT NULL, awarded_at INTEGER NOT NULL,
+  PRIMARY KEY(tournament_id,user_id), UNIQUE(tournament_id,place)
+);`);
 
 // Spider-Verse artifact passive tracking (safe for existing databases).
 db.exec(`

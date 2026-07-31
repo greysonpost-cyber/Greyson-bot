@@ -21,6 +21,7 @@ module.exports = {
     .addSubcommand(s=>s.setName('spider-man').setDescription('Use Spider-Man for +1 entry on a giveaway you choose')
       .addIntegerOption(o=>o.setName('giveaway_id').setDescription('Giveaway ID').setRequired(true)))
     .addSubcommand(s=>s.setName('web-swing').setDescription('Claim Web Swing\'s free Power Token'))
+    .addSubcommand(s=>s.setName('web-slinger').setDescription('Privately claim the Web Slinger passive'))
     .addSubcommand(s=>s.setName('status').setDescription('View your Spider-Verse passive status')),
 
   async execute(i, client) {
@@ -43,8 +44,8 @@ module.exports = {
       await gh.refreshGiveawayMessage(client,giveaway).catch(()=>{});
       return i.reply({embeds:[economyEmbed('🕷️ Spider-Man Activated!',`${divider()}\nGiveaway **#${id} — ${giveaway.prize}** received **+1 bonus entry**.\n\nThis power can be used again <t:${Math.floor((now+DAY)/1000)}:R>.`,COLORS.spiderRed)],ephemeral:true});
     }
-    if(sub==='web-swing'){
-      if(!arts.ownsNamed(g,u,'Web Swing')) return i.reply({embeds:[economyEmbed('🌟 Artifact Required','You must own **Web Swing** to claim this power.',COLORS.legendary)],ephemeral:true});
+    if(sub==='web-swing' || sub==='web-slinger'){
+      if(!arts.ownsNamed(g,u,'Web Swing') && !arts.ownsNamed(g,u,'Web Slinger')) return i.reply({embeds:[economyEmbed('🌟 Artifact Required','You must own **Web Swing / Web Slinger** to claim this power.',COLORS.legendary)],ephemeral:true});
       const last=cooldown(g,u,'web_swing');
       if(now-last<DAY) return i.reply({embeds:[economyEmbed('🕸️ Web Shooters Recharging',`Your next free Power Token is ready ${nextText(last)}.`,COLORS.legendary)],ephemeral:true});
       db.transaction(()=>{ eco.add(g,u,1,'Web Swing passive','SYSTEM'); mark(g,u,'web_swing',now); })();
