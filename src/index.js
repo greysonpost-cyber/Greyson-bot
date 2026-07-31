@@ -52,6 +52,7 @@ console.log(`[events] Loaded ${fs.readdirSync(eventsPath).filter(f => f.endsWith
 // ---- In-memory giveaway scheduler check (runs every 15s) ----
 require('./handlers/giveawayHandler').startScheduler(client);
 require('./services/boosterRewards').start(client);
+require('./services/tokenDrops').start(client);
 
 client.login(process.env.DISCORD_TOKEN);
 

@@ -6,6 +6,7 @@ const giveawayHandler = require('../handlers/giveawayHandler');
 const economyHandler = require('../handlers/economyHandler');
 const economy = require('../services/economy');
 const tournamentHandler = require('../handlers/tournamentHandler');
+const tokenDrops = require('../services/tokenDrops');
 const { getConfig } = require('../utils/config');
 
 module.exports = {
@@ -62,6 +63,7 @@ module.exports = {
                 await interaction.update({ content: `⚡ ${interaction.user} was fastest! ${reward ? `They earned **${reward} PT**.` : `They reached today's minigame cap.`}`, components: [] });
                 return;
             }
+            if (customId.startsWith('token_drop:')) return tokenDrops.handleInteraction(interaction, client);
             if (customId.startsWith('tournament_')) return tournamentHandler.handleInteraction(interaction, client);
         } catch (err) {
             console.error('[interactionCreate] Error:', err);

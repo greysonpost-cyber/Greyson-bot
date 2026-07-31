@@ -12,6 +12,7 @@ const CONFIG_KEYS = [
     'ai_enabled', 'ai_knowledge', 'ai_help_channel', 'ai_guild_channel', 'ai_giveaway_channel', 'ai_staff_role',
     'auto_role_on_join', 'auto_role_on_verify', 'auto_role_on_guild_accept', 'auto_role_on_ticket_accept',
     'tournament_manager_role', 'tournament_announcement_channel', 'tournament_participant_role',
+    'token_drop_channel',
 ];
 
 const getSet = db.prepare(

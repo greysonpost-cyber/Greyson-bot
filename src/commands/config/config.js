@@ -15,6 +15,7 @@ const CHANNEL_KEYS = [
     { name: 'Ticket Transcript Channel', value: 'ticket_transcript_channel' },
     { name: 'Live Guild Roster Channel', value: 'guild_roster_channel' },
     { name: 'Default Giveaway Channel', value: 'giveaway_default_channel' },
+    { name: 'Automatic Token Drops Channel', value: 'token_drop_channel' },
 ];
 
 const ROLE_KEYS = [

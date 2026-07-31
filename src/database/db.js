@@ -117,6 +117,28 @@ CREATE TABLE IF NOT EXISTS tournament_placement_rewards (
   PRIMARY KEY(tournament_id,user_id), UNIQUE(tournament_id,place)
 );`);
 
+// Automatic Power Token drops (safe for existing databases).
+db.exec(`
+CREATE TABLE IF NOT EXISTS token_drop_state (
+  guild_id TEXT PRIMARY KEY,
+  next_drop_at INTEGER NOT NULL
+);
+CREATE TABLE IF NOT EXISTS token_drops (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  guild_id TEXT NOT NULL,
+  channel_id TEXT NOT NULL,
+  message_id TEXT,
+  amount INTEGER NOT NULL,
+  status TEXT NOT NULL DEFAULT 'active',
+  winner_id TEXT,
+  created_at INTEGER NOT NULL,
+  expires_at INTEGER NOT NULL,
+  claimed_at INTEGER
+);
+CREATE INDEX IF NOT EXISTS idx_token_drops_active
+  ON token_drops(status, expires_at);
+`);
+
 // Spider-Verse artifact passive tracking (safe for existing databases).
 db.exec(`
 CREATE TABLE IF NOT EXISTS artifact_passive_cooldowns (

@@ -1,25 +1,31 @@
-DRIPCORE TOKEN + TOURNAMENT POWERS UPDATE
+DRIPCORE AUTOMATIC TOKEN DROPS UPDATE
+=====================================
 
-1. Upload the included src folder over your repository's existing src folder.
-2. Replace all matching files.
-3. Redeploy slash commands because /passive and /tournament gained new subcommands:
+WHAT THIS ADDS
+- A random drop appears every 10 minutes.
+- Each drop contains 1, 2, or 3 Power Tokens.
+- The first member to click the claim button wins.
+- The claim button expires after 15 seconds.
+- Claimed tokens are added directly to the winner's balance and ledger.
+- Duplicate claims are blocked with an atomic database transaction.
+- Active drops are safely expired after a restart.
 
-   npm run deploy
-
+INSTALL
+1. Upload the included src folder into the root of your bot repository.
+2. Replace the matching files when prompted.
+3. Run: npm run deploy
 4. Restart/redeploy the bot.
 
-WHAT CHANGED
-- /tokens daily now grants exactly 1 PT every 24 hours.
-- /passive web-slinger privately claims +1 PT every 24 hours for owners of Web Swing or Web Slinger.
-- Tournament rounds now open a private power-selection phase before each game.
-- Shield costs 10 PT and blocks one removal/elimination during that round.
-- Double Points costs 5 PT and doubles points awarded in that round.
-- Only one power may be chosen per round, and selection locks when a manager uses /tournament begin-round.
-- Tournament finish rewards are automatic: 1st 15 PT, 2nd 10 PT, 3rd 5 PT.
-- Giveaway winners are announced, but prizes are fulfilled manually; no automatic claim ticket is created.
-- Server minigame/event winners receive a random 1-5 PT, subject to the existing daily minigame cap.
+CHANNEL SETUP
+The bot first uses the configured Automatic Token Drops Channel.
+Run:
+/config set-channel key:Automatic Token Drops Channel channel:#general
 
-ROUND FLOW
-1. Manager uses /tournament start (or /tournament next-round).
-2. Players pick one power from the tournament panel or /tournament power.
-3. Manager uses /tournament begin-round to lock selections and start the game.
+If this is not configured, the bot automatically looks for a text channel named
+#general, then another channel containing "general", then the server system channel.
+
+NOTES
+- The first drop is scheduled for about 10 minutes after the update starts.
+- The database tables are created automatically.
+- The bot needs View Channel, Send Messages, Embed Links, and Read Message History
+  permissions in the selected channel.
