@@ -1,6 +1,7 @@
 const {
   ActionRowBuilder, ButtonBuilder, ButtonStyle, PermissionFlagsBits,
-  ChannelType, AttachmentBuilder, Routes, ModalBuilder, TextInputBuilder, TextInputStyle
+  ChannelType, AttachmentBuilder, Routes, ModalBuilder, TextInputBuilder, TextInputStyle,
+  StringSelectMenuBuilder
 } = require('discord.js');
 const db = require('../database/db');
 const eco = require('../services/economy');
@@ -25,12 +26,23 @@ const getVotes = db.prepare('SELECT * FROM giveaway_ticket_votes WHERE claim_id=
 const ensureVotes = db.prepare('INSERT OR IGNORE INTO giveaway_ticket_votes (claim_id) VALUES (?)');
 const REQUIRED_SERVER_TAG = 'DRIP';
 
-function entryButton(g) {
-  return new ActionRowBuilder().addComponents(
-    new ButtonBuilder().setCustomId(`giveaway_enter:${g.id}`).setLabel(`🎉 ${countEntries.get(g.id).c}`).setStyle(ButtonStyle.Primary),
-    new ButtonBuilder().setCustomId(`giveaway_participants:${g.id}`).setLabel('Participants').setEmoji('👥').setStyle(ButtonStyle.Secondary),
-    new ButtonBuilder().setCustomId(`giveaway_tokenboost:${g.id}`).setLabel('+1 Entry • 1 PT').setEmoji('💠').setStyle(ButtonStyle.Success)
+function entryComponents(g) {
+  const actions = new ActionRowBuilder().addComponents(
+    new ButtonBuilder().setCustomId(`giveaway_enter:${g.id}`).setLabel(`Enter Giveaway • ${countEntries.get(g.id).c}`).setEmoji('🎟️').setStyle(ButtonStyle.Primary),
+    new ButtonBuilder().setCustomId(`giveaway_participants:${g.id}`).setLabel('View Entrants').setEmoji('👥').setStyle(ButtonStyle.Secondary)
   );
+  const boosts = new ActionRowBuilder().addComponents(
+    new StringSelectMenuBuilder()
+      .setCustomId(`giveaway_boostselect:${g.id}`)
+      .setPlaceholder('💠 Choose an entry boost')
+      .addOptions(
+        { label: '+1 Bonus Entry', description: 'Spend 1 Power Token', value: 'token_1', emoji: '💠' },
+        { label: '+3 Bonus Entries', description: 'Spend 3 Power Tokens', value: 'token_3', emoji: '⚡' },
+        { label: '+5 Bonus Entries', description: 'Spend 5 Power Tokens', value: 'token_5', emoji: '🌌' },
+        { label: 'Spider-Man Power', description: '+1 entry free • once every 24 hours', value: 'spider_man', emoji: '🕷️' }
+      )
+  );
+  return [actions, boosts];
 }
 
 function leaveConfirmButton(giveawayId) {
@@ -57,7 +69,7 @@ function giveawayEmbed(g) {
 
   const embed = baseEmbed()
     .setTitle(`🎉 ${g.prize}`)
-    .setDescription('Press **Enter Giveaway** below for a chance to win!')
+    .setDescription('━━━━━━━━━━━━━━━━━━━━\n**ENTER THE MULTIVERSE. CLAIM THE PRIZE.**\nUse the controls below to enter, view competitors, or power up your odds.\n━━━━━━━━━━━━━━━━━━━━')
     .addFields(
       { name: '⏰ Ends', value: `<t:${Math.floor(g.ends_at / 1000)}:R>
 <t:${Math.floor(g.ends_at / 1000)}:F>`, inline: true },
@@ -80,7 +92,7 @@ function giveawayEmbed(g) {
     embed.addFields({ name: '✨ Bonus Entries', value: 'No bonus-entry roles are configured.', inline: false });
   }
 
-  embed.addFields({ name: '💠 Power Token Boost', value: 'After entering, press **+1 Entry • 1 PT** to buy one extra entry. Limit: one boost per giveaway.', inline: false });
+  embed.addFields({ name: '💠 Multiverse Entry Boosts', value: 'After entering, use the select menu to choose **+1, +3, or +5 entries** with Power Tokens—or activate **Spider-Man** for a free +1 entry once every 24 hours. One paid boost per giveaway.', inline: false });
 
   const boosterRole = getConfig(g.guild_id, 'giveaway_booster_role');
   embed.addFields({
@@ -91,14 +103,14 @@ function giveawayEmbed(g) {
     inline: false
   });
 
-  return embed;
+  return embed.setColor(g.ended ? 0x64748B : g.locked ? 0xF5B942 : 0xE62429).setAuthor({ name: '🕷️ DRIPCORE GIVEAWAYS • SPIDER-VERSE' }).setFooter({ text: `Giveaway #${g.id} • Power Tokens can bend the odds` });
 }
 
 async function refreshGiveawayMessage(client, g) {
   const channel = await client.channels.fetch(g.channel_id).catch(() => null);
   if (!channel?.isTextBased() || !g.message_id) return;
   const message = await channel.messages.fetch(g.message_id).catch(() => null);
-  if (message) await message.edit({ embeds: [giveawayEmbed(g)], components: [entryButton(g)] }).catch(() => {});
+  if (message) await message.edit({ embeds: [giveawayEmbed(g)], components: entryComponents(g) }).catch(() => {});
 }
 
 function memberEntries(member) {
@@ -486,25 +498,59 @@ async function handleInteraction(i, client) {
     const channel = await i.guild.channels.fetch(g.channel_id).catch(() => null);
     const message = channel?.isTextBased() && g.message_id ? await channel.messages.fetch(g.message_id).catch(() => null) : null;
     if (message) {
-      await message.edit({ embeds: [giveawayEmbed(g)], components: [entryButton(g)] }).catch(() => {});
+      await message.edit({ embeds: [giveawayEmbed(g)], components: entryComponents(g) }).catch(() => {});
     }
     return i.reply({ embeds: [successEmbed('Entered!', `Roblox username: **${robloxUsername}**\nYou received **${entries}** entr${entries === 1 ? 'y' : 'ies'}${bypass ? ' and your booster bypass is active.' : '.'}`)], ephemeral: true });
   }
 
-  if (action === 'giveaway_tokenboost') {
+  if (action === 'giveaway_tokenboost' || action === 'giveaway_boostselect') {
     const g = getGiveaway.get(id);
     if (!g) return i.reply({ embeds: [errorEmbed('Giveaway Not Found')], ephemeral: true });
     if (g.ended || g.locked) return i.reply({ embeds: [errorEmbed(g.ended ? 'Giveaway Ended' : 'Giveaway Locked')], ephemeral: true });
     const entry = getEntry.get(id, i.user.id);
-    if (!entry) return i.reply({ embeds: [errorEmbed('Enter First', 'Enter the giveaway normally before buying a Power Token entry.')], ephemeral: true });
-    if (db.prepare('SELECT 1 FROM giveaway_token_boosts WHERE giveaway_id=? AND user_id=?').get(id,i.user.id)) return i.reply({ embeds: [infoEmbed('Boost Already Used', 'You can purchase only one Power Token entry per giveaway.')], ephemeral: true });
-    if (!eco.spend(i.guild.id,i.user.id,1,`Giveaway #${id} extra entry`,i.user.id)) return i.reply({ embeds: [errorEmbed('Not Enough Power Tokens', `You need **1 PT**. Your balance is **${eco.bal(i.guild.id,i.user.id)} PT**.`)], ephemeral: true });
-    db.transaction(()=>{
-      db.prepare('UPDATE giveaway_entries SET entries=entries+1 WHERE giveaway_id=? AND user_id=?').run(id,i.user.id);
-      db.prepare('INSERT INTO giveaway_token_boosts(giveaway_id,guild_id,user_id,tokens_spent,created_at) VALUES(?,?,?,?,?)').run(id,i.guild.id,i.user.id,1,Date.now());
+    if (!entry) return i.reply({ embeds: [errorEmbed('Enter First', 'Enter the giveaway normally before choosing an entry boost.')], ephemeral: true });
+
+    const choice = action === 'giveaway_tokenboost' ? 'token_1' : i.values?.[0];
+    if (choice === 'spider_man') {
+      if (!arts.ownsNamed(i.guild.id, i.user.id, 'Spider-Man')) {
+        return i.reply({ embeds: [errorEmbed('Spider-Man Required', 'You must own the **Spider-Man** artifact to use this power.')], ephemeral: true });
+      }
+      const DAY = 86_400_000;
+      const row = db.prepare('SELECT last_used_at FROM artifact_passive_cooldowns WHERE guild_id=? AND user_id=? AND passive_key=?').get(i.guild.id, i.user.id, 'spider_man');
+      const last = row?.last_used_at || 0;
+      if (Date.now() - last < DAY) {
+        return i.reply({ embeds: [infoEmbed('Spider-Sense Recharging', `Your Spider-Man boost is ready <t:${Math.floor((last + DAY) / 1000)}:R>.`)], ephemeral: true });
+      }
+      db.transaction(() => {
+        db.prepare('UPDATE giveaway_entries SET entries=entries+1 WHERE giveaway_id=? AND user_id=?').run(id, i.user.id);
+        db.prepare(`INSERT INTO artifact_passive_cooldowns(guild_id,user_id,passive_key,last_used_at) VALUES(?,?,?,?)
+          ON CONFLICT(guild_id,user_id,passive_key) DO UPDATE SET last_used_at=excluded.last_used_at`).run(i.guild.id, i.user.id, 'spider_man', Date.now());
+      })();
+      await refreshGiveawayMessage(client, g);
+      return i.reply({ embeds: [successEmbed('Spider-Man Activated!', `🕷️ **+1 bonus entry** added to **${g.prize}**.
+
+You now have **${entry.entries + 1} entries**. Your power recharges in 24 hours.`)], ephemeral: true });
+    }
+
+    const amount = Number(String(choice || '').replace('token_', ''));
+    if (![1, 3, 5].includes(amount)) return i.reply({ embeds: [errorEmbed('Invalid Boost', 'Choose a valid entry boost from the menu.')], ephemeral: true });
+    if (db.prepare('SELECT 1 FROM giveaway_token_boosts WHERE giveaway_id=? AND user_id=?').get(id, i.user.id)) {
+      return i.reply({ embeds: [infoEmbed('Paid Boost Already Used', 'You can choose only one paid Power Token boost per giveaway.')], ephemeral: true });
+    }
+    if (!eco.spend(i.guild.id, i.user.id, amount, `Giveaway #${id} +${amount} entries`, i.user.id)) {
+      return i.reply({ embeds: [errorEmbed('Not Enough Power Tokens', `This boost costs **${amount} PT**. Your balance is **${eco.bal(i.guild.id, i.user.id)} PT**.`)], ephemeral: true });
+    }
+    db.transaction(() => {
+      db.prepare('UPDATE giveaway_entries SET entries=entries+? WHERE giveaway_id=? AND user_id=?').run(amount, id, i.user.id);
+      db.prepare('INSERT INTO giveaway_token_boosts(giveaway_id,guild_id,user_id,tokens_spent,created_at) VALUES(?,?,?,?,?)').run(id, i.guild.id, i.user.id, amount, Date.now());
     })();
-    await refreshGiveawayMessage(client,g);
-    return i.reply({ embeds: [successEmbed('Power Token Entry Added!', `You now have **${entry.entries+1} entries** in **${g.prize}**.\n\nIf you own **Friendly Neighborhood** and lose, this token can be refunded (up to 2 times per day).`)], ephemeral: true });
+    await refreshGiveawayMessage(client, g);
+    return i.reply({ embeds: [successEmbed('Multiverse Boost Applied!', `💠 **+${amount} entries** added to **${g.prize}**.
+
+**Entries:** ${entry.entries + amount}
+**Balance:** ${eco.bal(i.guild.id, i.user.id)} PT
+
+Friendly Neighborhood may refund the spent tokens if you lose, up to its daily limit.`)], ephemeral: true });
   }
 
   if (action === 'giveaway_leave_confirm') {
@@ -528,7 +574,7 @@ async function handleInteraction(i, client) {
     const total = countEntries.get(id).c;
     const giveawayMessage = await i.channel.messages.fetch(g.message_id).catch(() => null);
     if (giveawayMessage) {
-      await giveawayMessage.edit({ embeds: [giveawayEmbed(g)], components: [entryButton(g)] }).catch(() => {});
+      await giveawayMessage.edit({ embeds: [giveawayEmbed(g)], components: entryComponents(g) }).catch(() => {});
     }
     return i.update({
       embeds: [successEmbed('Left Giveaway', 'All of your entries, including bonus entries, were removed.')],
@@ -676,4 +722,4 @@ function startScheduler(client) {
   }, 15_000);
 }
 
-module.exports = { handleInteraction, entryButton, giveawayEmbed, refreshGiveawayMessage, endGiveaway, startScheduler, updateLocked, getGiveawayByMessage };
+module.exports = { handleInteraction, entryComponents, giveawayEmbed, refreshGiveawayMessage, endGiveaway, startScheduler, updateLocked, getGiveawayByMessage };

@@ -90,6 +90,7 @@ ensureColumn('giveaway_claims', 'deadline_at', 'INTEGER');
 ensureColumn('giveaway_claims', 'claimed', 'INTEGER NOT NULL DEFAULT 0');
 ensureColumn('giveaway_claims', 'auto_claimed', 'INTEGER NOT NULL DEFAULT 0');
 ensureColumn('giveaway_claims', 'created_at', 'INTEGER');
+ensureColumn('tournament_players', 'token_bonus_points', 'INTEGER NOT NULL DEFAULT 0');
 
 db.exec(`CREATE TABLE IF NOT EXISTS giveaway_ticket_votes (
   claim_id INTEGER PRIMARY KEY,
@@ -133,6 +134,16 @@ CREATE TABLE IF NOT EXISTS artifact_passive_refunds (
   artifact_name TEXT NOT NULL,
   refunded_at INTEGER NOT NULL,
   PRIMARY KEY(giveaway_id,user_id,artifact_name)
+);
+
+CREATE TABLE IF NOT EXISTS tournament_token_boosts (
+  tournament_id INTEGER NOT NULL,
+  guild_id TEXT NOT NULL,
+  user_id TEXT NOT NULL,
+  tokens_spent INTEGER NOT NULL,
+  points_added INTEGER NOT NULL,
+  created_at INTEGER NOT NULL,
+  PRIMARY KEY(tournament_id,user_id)
 );
 `);
 

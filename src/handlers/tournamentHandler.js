@@ -8,9 +8,12 @@ const {
   PermissionFlagsBits,
   TextInputBuilder,
   TextInputStyle,
+  StringSelectMenuBuilder,
 } = require('discord.js');
 const db = require('../database/db');
 const { getConfig, setConfig } = require('../utils/config');
+const eco = require('../services/economy');
+const { successEmbed, errorEmbed, infoEmbed } = require('../utils/embeds');
 
 const GAMES = [
   '🔪 Murder Mystery 2',
@@ -36,7 +39,7 @@ const q = {
 const activeSubmissionCollectors = new Map();
 
 function score(p) {
-  return Number(p.contribution_points || 0) + Number(p.round1_points || 0) + Number(p.round2_points || 0) + Number(p.round3_points || 0) + Number(p.round4_points || 0);
+  return Number(p.contribution_points || 0) + Number(p.token_bonus_points || 0) + Number(p.round1_points || 0) + Number(p.round2_points || 0) + Number(p.round3_points || 0) + Number(p.round4_points || 0);
 }
 
 function canManage(interaction) {
@@ -57,27 +60,50 @@ function stageLabel(t) {
 }
 
 function panelEmbed(t, players) {
-  const top = players.slice(0, 10).map((p, i) => `**${i + 1}.** <@${p.user_id}> — **${score(p)} pts**`).join('\n') || 'No players yet.';
-  const games = GAMES.map((g, i) => `${t.current_round > i + 1 || t.status === 'finished' ? '✅' : t.current_round === i + 1 ? '▶️' : '▫️'} ${g}`).join('\n');
+  const medals = ['🥇', '🥈', '🥉'];
+  const top = players.slice(0, 10).map((p, i) => `${medals[i] || `**${i + 1}.**`} <@${p.user_id}> — **${score(p)} pts**${p.token_bonus_points ? ` • 💠 +${p.token_bonus_points}` : ''}`).join('\n') || '🕸️ No challengers have entered the arena yet.';
+  const games = GAMES.map((g, i) => `${t.current_round > i + 1 || t.status === 'finished' ? '✅' : t.current_round === i + 1 ? '🔥' : '▫️'} ${g}`).join('\n');
+  const statusColor = t.status === 'finished' ? 0xF5B942 : t.status === 'registration' ? 0x1464F4 : 0x8B1CFB;
+  const filled = Math.min(10, Math.round((players.length / Math.max(1, t.max_players)) * 10));
+  const capacity = `${'▰'.repeat(filled)}${'▱'.repeat(10 - filled)}  **${players.length}/${t.max_players}**`;
   return new EmbedBuilder()
-    .setColor(0x5865F2)
-    .setTitle(`🏆 ${t.name}`)
-    .setDescription(`**Prize:** ${t.prize}\n**Status:** ${stageLabel(t)}\n**Players:** ${players.length}/${t.max_players}`)
+    .setColor(statusColor)
+    .setAuthor({ name: '🏆 DRIPCORE TOURNAMENTS • MULTIVERSE ARENA' })
+    .setTitle(`🕷️ ${t.name}`)
+    .setDescription(`━━━━━━━━━━━━━━━━━━━━
+### ${stageLabel(t)}
+🎁 **Grand Prize:** ${t.prize}
+👥 **Arena Capacity:** ${capacity}
+━━━━━━━━━━━━━━━━━━━━`)
     .addFields(
-      { name: 'Tournament Games', value: games, inline: true },
-      { name: 'Current Standings', value: top, inline: true },
-      { name: 'Contribution Bonus', value: 'Members who contribute to the prize pool can start with **0–5 extra points**. Staff records the amount with `/tournament contribution`.' },
+      { name: '🎮 MULTIVERSE ROUNDS', value: games, inline: true },
+      { name: '📊 LIVE STANDINGS', value: top, inline: true },
+      { name: '💠 POWER TOKEN BOOSTS', value: 'Registered players may choose **+1, +3, or +5 starting points**. The PT cost matches the points, and only one boost may be used per tournament.', inline: false },
+      { name: '✨ CONTRIBUTION BONUS', value: 'Prize-pool contributors may receive **0–5 additional starting points** from Tournament Managers.', inline: false },
     )
-    .setFooter({ text: 'DripCore Tournament System' })
+    .setFooter({ text: `Tournament #${t.id} • Only one champion survives the multiverse` })
     .setTimestamp();
 }
 
 function panelComponents(t) {
   if (t.status !== 'registration') return [];
-  return [new ActionRowBuilder().addComponents(
-    new ButtonBuilder().setCustomId(`tournament_join_${t.id}`).setLabel('Join Tournament').setEmoji('🏆').setStyle(ButtonStyle.Success),
-    new ButtonBuilder().setCustomId(`tournament_leave_${t.id}`).setLabel('Leave').setStyle(ButtonStyle.Secondary),
-  )];
+  return [
+    new ActionRowBuilder().addComponents(
+      new ButtonBuilder().setCustomId(`tournament_join_${t.id}`).setLabel('Enter Arena').setEmoji('🏆').setStyle(ButtonStyle.Success),
+      new ButtonBuilder().setCustomId(`tournament_participants_${t.id}`).setLabel('View Challengers').setEmoji('👥').setStyle(ButtonStyle.Primary),
+      new ButtonBuilder().setCustomId(`tournament_leave_${t.id}`).setLabel('Leave Arena').setEmoji('🚪').setStyle(ButtonStyle.Secondary),
+    ),
+    new ActionRowBuilder().addComponents(
+      new StringSelectMenuBuilder()
+        .setCustomId(`tournament_boost_${t.id}`)
+        .setPlaceholder('💠 Choose a tournament point boost')
+        .addOptions(
+          { label: '+1 Starting Point', description: 'Spend 1 Power Token', value: '1', emoji: '💠' },
+          { label: '+3 Starting Points', description: 'Spend 3 Power Tokens', value: '3', emoji: '⚡' },
+          { label: '+5 Starting Points', description: 'Spend 5 Power Tokens', value: '5', emoji: '🌌' }
+        )
+    )
+  ];
 }
 
 async function renderBoard(guild, t, players) {
@@ -397,6 +423,33 @@ async function handleInteraction(interaction, client) {
   const t = q.byId.get(id);
   if (!t || t.status === 'deleted') return interaction.reply({ content: '❌ This tournament is no longer available.', ephemeral: true });
 
+  if (action === 'participants') {
+    const players = q.players.all(t.id);
+    const lines = players.map((p, index) => `**${index + 1}.** <@${p.user_id}> • Roblox: **${p.roblox_username || 'Not set'}** • **${score(p)} pts**`).join('\n');
+    return interaction.reply({ embeds: [infoEmbed(`${t.name} Challengers`, lines.slice(0, 3900) || 'No challengers have registered yet.')], ephemeral: true });
+  }
+
+  if (action === 'boost') {
+    if (t.status !== 'registration') return interaction.reply({ embeds: [errorEmbed('Boosts Closed', 'Tournament boosts are available only during registration.')], ephemeral: true });
+    const player = q.player.get(t.id, interaction.user.id);
+    if (!player?.active) return interaction.reply({ embeds: [errorEmbed('Join First', 'Enter the tournament before purchasing a point boost.')], ephemeral: true });
+    const amount = Number(interaction.values?.[0]);
+    if (![1, 3, 5].includes(amount)) return interaction.reply({ embeds: [errorEmbed('Invalid Boost', 'Choose a valid option from the menu.')], ephemeral: true });
+    const used = db.prepare('SELECT * FROM tournament_token_boosts WHERE tournament_id=? AND user_id=?').get(t.id, interaction.user.id);
+    if (used) return interaction.reply({ embeds: [infoEmbed('Boost Already Used', `You already purchased **+${used.points_added} points** for this tournament.`)], ephemeral: true });
+    if (!eco.spend(interaction.guild.id, interaction.user.id, amount, `Tournament #${t.id} +${amount} points`, interaction.user.id)) {
+      return interaction.reply({ embeds: [errorEmbed('Not Enough Power Tokens', `This boost costs **${amount} PT**. Your balance is **${eco.bal(interaction.guild.id, interaction.user.id)} PT**.`)], ephemeral: true });
+    }
+    db.transaction(() => {
+      db.prepare('UPDATE tournament_players SET token_bonus_points=token_bonus_points+? WHERE tournament_id=? AND user_id=?').run(amount, t.id, interaction.user.id);
+      db.prepare('INSERT INTO tournament_token_boosts(tournament_id,guild_id,user_id,tokens_spent,points_added,created_at) VALUES(?,?,?,?,?,?)').run(t.id, interaction.guild.id, interaction.user.id, amount, amount, Date.now());
+    })();
+    await interaction.reply({ embeds: [successEmbed('Tournament Boost Activated!', `💠 **+${amount} starting points** added to **${t.name}**.
+
+**Balance:** ${eco.bal(interaction.guild.id, interaction.user.id)} PT`)], ephemeral: true });
+    return updatePanel(client, q.byId.get(t.id));
+  }
+
   if (action === 'join') {
     if (t.status !== 'registration') return interaction.reply({ content: '❌ Registration is closed.', ephemeral: true });
     if (q.count.get(t.id).c >= t.max_players) return interaction.reply({ content: '❌ The tournament is full.', ephemeral: true });
@@ -415,7 +468,7 @@ async function handleInteraction(interaction, client) {
       t.id, interaction.user.id, interaction.member.displayName || interaction.user.username, username, Date.now(),
     );
     if (t.participant_role_id) await interaction.member.roles.add(t.participant_role_id).catch(() => {});
-    await interaction.reply({ content: `✅ You joined **${t.name}** as Roblox user **${username}**.`, ephemeral: true });
+    await interaction.reply({ embeds: [successEmbed('Welcome to the Arena!', `You joined **${t.name}** as Roblox user **${username}**.\n\nUse the Power Token menu on the tournament panel to add starting points.`)], ephemeral: true });
     return updatePanel(client, q.byId.get(t.id));
   }
 
@@ -484,7 +537,7 @@ async function handleInteraction(interaction, client) {
   if (action === 'leave') {
     db.prepare(`UPDATE tournament_players SET active=0 WHERE tournament_id=? AND user_id=?`).run(t.id, interaction.user.id);
     if (t.participant_role_id) await interaction.member.roles.remove(t.participant_role_id).catch(() => {});
-    await interaction.reply({ content: `You left **${t.name}**.`, ephemeral: true });
+    await interaction.reply({ embeds: [infoEmbed('Left the Arena', `You left **${t.name}**. Any purchased tournament boost is not refunded.`)], ephemeral: true });
     return updatePanel(client, q.byId.get(t.id));
   }
 }

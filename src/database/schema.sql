@@ -240,6 +240,7 @@ CREATE TABLE IF NOT EXISTS tournament_players (
   display_name TEXT NOT NULL,
   roblox_username TEXT,
   contribution_points INTEGER NOT NULL DEFAULT 0 CHECK(contribution_points BETWEEN 0 AND 5),
+  token_bonus_points INTEGER NOT NULL DEFAULT 0,
   round1_points INTEGER NOT NULL DEFAULT 0,
   round2_points INTEGER NOT NULL DEFAULT 0,
   round3_points INTEGER NOT NULL DEFAULT 0,
@@ -322,3 +323,15 @@ CREATE TABLE IF NOT EXISTS collection_preferences (guild_id TEXT NOT NULL,user_i
 CREATE TABLE IF NOT EXISTS economy_config (guild_id TEXT NOT NULL,key TEXT NOT NULL,value TEXT,PRIMARY KEY(guild_id,key));
 CREATE INDEX IF NOT EXISTS idx_artifacts_owner ON artifacts(owner_id);
 CREATE INDEX IF NOT EXISTS idx_market_active ON marketplace_listings(guild_id,status);
+
+
+-- Power Token boosts selected from tournament panels
+CREATE TABLE IF NOT EXISTS tournament_token_boosts (
+  tournament_id INTEGER NOT NULL,
+  guild_id TEXT NOT NULL,
+  user_id TEXT NOT NULL,
+  tokens_spent INTEGER NOT NULL,
+  points_added INTEGER NOT NULL,
+  created_at INTEGER NOT NULL,
+  PRIMARY KEY(tournament_id,user_id)
+);

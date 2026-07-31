@@ -1,16 +1,22 @@
-DRIPCORE ARTIFACT DELETE UPDATE
+DRIPCORE — GIVEAWAY + TOURNAMENT UI UPDATE
 
-1. Open your bot repository.
-2. Upload the included src folder into the repository root.
-3. Replace the existing file when asked:
-   src/commands/economy/artifact.js
-4. Redeploy/restart the bot so Discord receives the updated slash command.
-5. Use:
-   /artifact delete type_id:<TYPE ID> confirmation:DELETE
+1. Upload the included src folder over the src folder in your repository.
+2. Replace matching files.
+3. Restart/redeploy the bot.
+4. Slash commands do not change, so command deployment is optional.
 
-Optional:
-- delete_role:true deletes the Discord collectible role too (default).
-- delete_role:false keeps the role but removes it from recorded owners.
+NEW GIVEAWAY CONTROLS
+- Select +1 entry for 1 PT
+- Select +3 entries for 3 PT
+- Select +5 entries for 5 PT
+- Activate Spider-Man for +1 free entry once every 24 hours
+- One paid Power Token boost per giveaway
 
-WARNING: This permanently removes every numbered copy, all ownership records,
-shop stock, marketplace listings, history, preferences, and affected trades.
+NEW TOURNAMENT CONTROLS
+- Select +1 starting point for 1 PT
+- Select +3 starting points for 3 PT
+- Select +5 starting points for 5 PT
+- One Power Token boost per tournament
+
+The database migration runs automatically when the bot starts.
+Existing giveaways and tournament panels refresh when they are updated/restarted through normal bot actions.

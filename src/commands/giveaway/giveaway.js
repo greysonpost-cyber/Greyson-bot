@@ -2,7 +2,7 @@ const { SlashCommandBuilder, ChannelType, PermissionFlagsBits } = require('disco
 const db = require('../../database/db');
 const { successEmbed, errorEmbed } = require('../../utils/embeds');
 const { getConfig } = require('../../utils/config');
-const { entryButton, giveawayEmbed, endGiveaway, updateLocked, getGiveawayByMessage } = require('../../handlers/giveawayHandler');
+const { entryComponents, giveawayEmbed, endGiveaway, updateLocked, getGiveawayByMessage } = require('../../handlers/giveawayHandler');
 
 const insert = db.prepare(`INSERT INTO giveaways
   (guild_id,channel_id,prize,hosted_by,winner_count,required_role_id,required_guild_rank,ends_at,created_at)
@@ -87,7 +87,7 @@ module.exports = {
         Date.now()
       );
       const giveaway = get.get(info.lastInsertRowid);
-      const message = await channel.send({ embeds: [giveawayEmbed(giveaway)], components: [entryButton(giveaway)] });
+      const message = await channel.send({ embeds: [giveawayEmbed(giveaway)], components: entryComponents(giveaway) });
       db.prepare('UPDATE giveaways SET message_id=? WHERE id=?').run(message.id, giveaway.id);
       return interaction.reply({
         embeds: [successEmbed('Giveaway Started', `**#${giveaway.id}** posted in ${channel}. Entrants must provide their Roblox username.`)],
@@ -113,7 +113,7 @@ module.exports = {
       const message = channel?.isTextBased() && giveaway.message_id
         ? await channel.messages.fetch(giveaway.message_id).catch(() => null)
         : null;
-      if (message) await message.edit({ embeds: [giveawayEmbed(giveaway)], components: [entryButton(giveaway)] }).catch(() => {});
+      if (message) await message.edit({ embeds: [giveawayEmbed(giveaway)], components: entryComponents(giveaway) }).catch(() => {});
       return interaction.reply({ embeds: [successEmbed('Participant Removed', `${user} was removed from giveaway #${giveawayId}.`)], ephemeral: true });
     }
 
