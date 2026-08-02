@@ -66,6 +66,27 @@ module.exports = {
       .setDescription('Set prize-contribution bonus points (0-5 maximum)')
       .addUserOption(o => o.setName('user').setDescription('Participant').setRequired(true))
       .addIntegerOption(o => o.setName('points').setDescription('Starting bonus points').setRequired(true).setMinValue(0).setMaxValue(5)))
+    .addSubcommand(sub => sub
+      .setName('edit-points')
+      .setDescription('Manager-only: set, add, or remove a player’s tournament points')
+      .addUserOption(o => o.setName('user').setDescription('Tournament participant').setRequired(true))
+      .addStringOption(o => o.setName('category').setDescription('Which score to edit').setRequired(true)
+        .addChoices(
+          { name: 'Displayed total (uses correction points)', value: 'total' },
+          { name: 'Prize contribution bonus', value: 'contribution' },
+          { name: 'Round 1 — MM2', value: 'round1' },
+          { name: 'Round 2 — Dress to Impress', value: 'round2' },
+          { name: 'Round 3 — Best Screenshot', value: 'round3' },
+          { name: 'Round 4 — Avatar Creator', value: 'round4' },
+        ))
+      .addStringOption(o => o.setName('action').setDescription('How to change the score').setRequired(true)
+        .addChoices(
+          { name: 'Set to an exact amount', value: 'set' },
+          { name: 'Add points', value: 'add' },
+          { name: 'Remove points', value: 'remove' },
+        ))
+      .addIntegerOption(o => o.setName('amount').setDescription('Point amount').setRequired(true).setMinValue(0).setMaxValue(10000))
+      .addStringOption(o => o.setName('reason').setDescription('Optional reason for the correction').setMaxLength(150)))
     .addSubcommand(sub => sub.setName('next-round').setDescription('Advance to the next game/round'))
     .addSubcommand(sub => sub.setName('leaderboard').setDescription('Post the current leaderboard and custom picture'))
     .addSubcommand(sub => sub.setName('participants').setDescription('List registered participants'))

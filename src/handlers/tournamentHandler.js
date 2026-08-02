@@ -593,6 +593,85 @@ ${lines}` });
     return updatePanel(client, q.byId.get(t.id));
   }
 
+  if (sub === 'edit-points') {
+    const user = interaction.options.getUser('user');
+    const player = q.player.get(t.id, user.id);
+    if (!player) return interaction.reply({ content: '❌ That user is not registered in this tournament.', ephemeral: true });
+
+    const category = interaction.options.getString('category');
+    const action = interaction.options.getString('action');
+    const amount = interaction.options.getInteger('amount');
+    const reason = interaction.options.getString('reason') || 'Manual tournament score correction';
+    const columns = {
+      contribution: 'contribution_points',
+      round1: 'round1_points',
+      round2: 'round2_points',
+      round3: 'round3_points',
+      round4: 'round4_points',
+    };
+
+    const beforeTotal = score(player);
+    let column;
+    let beforeValue;
+    let afterValue;
+
+    if (category === 'total') {
+      // token_bonus_points is used as a correction bucket so historical round scores stay intact.
+      column = 'token_bonus_points';
+      beforeValue = Number(player.token_bonus_points || 0);
+      const targetTotal = action === 'set'
+        ? amount
+        : action === 'add'
+          ? beforeTotal + amount
+          : Math.max(0, beforeTotal - amount);
+      afterValue = beforeValue + (targetTotal - beforeTotal);
+    } else {
+      column = columns[category];
+      if (!column) return interaction.reply({ content: '❌ Invalid point category.', ephemeral: true });
+      beforeValue = Number(player[column] || 0);
+      afterValue = action === 'set'
+        ? amount
+        : action === 'add'
+          ? beforeValue + amount
+          : Math.max(0, beforeValue - amount);
+      if (category === 'contribution') afterValue = Math.min(5, afterValue);
+    }
+
+    db.prepare(`UPDATE tournament_players SET ${column}=? WHERE tournament_id=? AND user_id=?`).run(afterValue, t.id, user.id);
+    const updated = q.player.get(t.id, user.id);
+    const afterTotal = score(updated);
+    const delta = afterTotal - beforeTotal;
+    db.prepare(`INSERT INTO tournament_awards (tournament_id,user_id,round_number,points,note,awarded_by,created_at) VALUES (?,?,?,?,?,?,?)`).run(
+      t.id,
+      user.id,
+      category.startsWith('round') ? Number(category.replace('round', '')) : 0,
+      delta,
+      `${reason} [${action} ${amount}; ${category}; total ${beforeTotal} -> ${afterTotal}]`,
+      interaction.user.id,
+      Date.now(),
+    );
+
+    const categoryNames = {
+      total: 'Displayed Total',
+      contribution: 'Contribution Bonus',
+      round1: 'Round 1 — MM2',
+      round2: 'Round 2 — Dress to Impress',
+      round3: 'Round 3 — Best Screenshot',
+      round4: 'Round 4 — Avatar Creator',
+    };
+    await interaction.reply({
+      embeds: [successEmbed('Tournament Points Updated', `${user}'s score was corrected by ${interaction.user}.
+
+**Category:** ${categoryNames[category]}
+**Action:** ${action.toUpperCase()} ${amount}
+**Category value:** ${beforeValue} → ${afterValue}
+**Displayed total:** ${beforeTotal} → **${afterTotal}**
+**Reason:** ${reason}`)],
+      ephemeral: true,
+    });
+    return updatePanel(client, q.byId.get(t.id));
+  }
+
   if (sub === 'next-round') {
     if (t.status !== 'active') return interaction.reply({ content: '❌ The tournament is not active.', ephemeral: true });
     if (!t.round_started) return interaction.reply({ content: '❌ Begin the current round before advancing.', ephemeral: true });

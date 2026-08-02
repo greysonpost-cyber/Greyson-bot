@@ -1,15 +1,24 @@
-DRIPCORE DTI DM SUBMISSION FIX
+DRIPCORE TOURNAMENT EDIT POINTS PATCH
 
-1. Open this ZIP.
-2. Upload the included src folder into the root of your GitHub repository.
-3. Replace src/index.js when prompted.
+1. Open your GitHub bot repository.
+2. Upload the included src folder into the repository root.
+3. Replace the two matching files when GitHub asks.
 4. Redeploy/restart Railway.
-5. You do NOT need to run npm run deploy because no slash commands changed.
+5. Run: npm run deploy
 
-WHY IT FAILED
-The bot could send DMs, but it did not subscribe to incoming Direct Message events.
-The DTI collector therefore never saw the screenshot message.
+NEW COMMAND
+/tournament edit-points
 
-AFTER RESTARTING
-Press Submit Outfit again, then send one image attachment in the bot DM.
-The bot should reply with the green Submission Saved embed.
+Options:
+- user: player to edit
+- category: displayed total, contribution, or rounds 1-4
+- action: set, add, or remove
+- amount: number of points
+- reason: optional audit note
+
+Examples:
+/tournament edit-points user:@Greyson category:Round 2 action:Set amount:10
+/tournament edit-points user:@Greyson category:Displayed total action:Add amount:3
+/tournament edit-points user:@Greyson category:Round 1 action:Remove amount:2
+
+Only Tournament Managers and server administrators can use it. The live tournament panel updates automatically.
