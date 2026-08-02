@@ -30,7 +30,7 @@ function previewEmbed(t, rows) {
    .setAuthor({name:'🏆 DRIPCORE • TOURNAMENT CONTROL'})
    .setTitle(`${s?.status==='approved'?'🔒 Official':'🛠️ Editable'} Bracket — Round ${t.current_round||2}`)
    .setDescription(`━━━━━━━━━━━━━━━━━━━━\n${bracketText(t,rows)}\n━━━━━━━━━━━━━━━━━━━━`)
-   .addFields({name:'📌 Status',value:s?.status==='approved'?'Approved and locked. Use `/tournament bracket-unlock` before editing.':'Preview only. Remove no-shows, edit matchups, shuffle, then approve.'})
+   .addFields({name:'📌 Status',value:s?.status==='approved'?'Approved and locked. Use `/tournament bracket unlock` before editing.':'Preview only. Remove no-shows, edit matchups, shuffle, then approve.'})
    .setFooter({text:`Tournament #${t.id} • Version ${s?.version||1}`}).setTimestamp();
 }
 function detailedGuide(t) {
@@ -38,15 +38,15 @@ function detailedGuide(t) {
  .setTitle(`👗 ${t.name} — Dress to Impress Control Guide`)
  .setDescription('Every step below is saved. Managers can stop after any step and continue later without losing the bracket.')
  .addFields(
-  {name:'1️⃣ Finalize the active roster',value:'Use `/tournament participants` to review signups. Use `/tournament roster-add` for an approved late player and `/tournament roster-remove` for a no-show. Removing a player here does not delete their history.'},
-  {name:'2️⃣ Open check-in',value:'Use `/tournament checkin-open minutes:10`. Players press **I’m Ready**. The panel explains that checking in confirms attendance only—it does not start DTI or submit an outfit.'},
-  {name:'3️⃣ Close check-in',value:'Use `/tournament checkin-close remove_absent:true` to automatically remove anyone who did not check in. Use `false` to keep absentees while you review them manually.'},
-  {name:'4️⃣ Generate an editable bracket',value:'Use `/tournament bracket-generate`. The bot shuffles active players into written matchups such as **Greyson vs Vartx**. An odd player receives a bye. This is only a preview.'},
-  {name:'5️⃣ Fix the bracket',value:'Use `/tournament bracket-edit match:1 player_one:@User player_two:@User`, `/tournament bracket-shuffle`, or the roster commands. Any edit returns the bracket to preview status.'},
-  {name:'6️⃣ Approve and publish',value:'Use `/tournament bracket-approve`. The bracket becomes official and is posted in the tournament channel. Use `/tournament bracket-unlock` only before submissions begin if an emergency change is needed.'},
+  {name:'1️⃣ Finalize the active roster',value:'Use `/tournament participants` to review signups. Use `/tournament roster add` for an approved late player and `/tournament roster remove` for a no-show. Removing a player here does not delete their history.'},
+  {name:'2️⃣ Open check-in',value:'Use `/tournament roster checkin-open minutes:10`. Players press **I’m Ready**. The panel explains that checking in confirms attendance only—it does not start DTI or submit an outfit.'},
+  {name:'3️⃣ Close check-in',value:'Use `/tournament roster checkin-close remove_absent:true` to automatically remove anyone who did not check in. Use `false` to keep absentees while you review them manually.'},
+  {name:'4️⃣ Generate an editable bracket',value:'Use `/tournament bracket generate`. The bot shuffles active players into written matchups such as **Greyson vs Vartx**. An odd player receives a bye. This is only a preview.'},
+  {name:'5️⃣ Fix the bracket',value:'Use `/tournament bracket edit match:1 player_one:@User player_two:@User`, `/tournament bracket shuffle`, or the roster commands. Any edit returns the bracket to preview status.'},
+  {name:'6️⃣ Approve and publish',value:'Use `/tournament bracket approve`. The bracket becomes official and is posted in the tournament channel. Use `/tournament bracket unlock` only before submissions begin if an emergency change is needed.'},
   {name:'7️⃣ Pick powers before the game',value:'Players privately choose **Shield (10 PT)**, **Double Points (5 PT)**, or no power. Only one power is allowed per game. `/tournament begin-round` locks all choices.'},
   {name:'8️⃣ Open DTI submissions',value:'Use `/tournament open-dti theme:<theme> minutes:<time>`. Players press **Submit Outfit**, receive private DM instructions, and may replace their image before the deadline.'},
-  {name:'9️⃣ Handle missing submissions',value:'After the deadline, use `/tournament bracket-view` and the submission count. One submission means that player advances by default; neither submission requires a manager decision.'},
+  {name:'9️⃣ Handle missing submissions',value:'After the deadline, use `/tournament bracket view` and the submission count. One submission means that player advances by default; neither submission requires a manager decision.'},
   {name:'🔟 Anonymous voting and results',value:'Use `/tournament open-dti-voting`. Votes stay private. When complete, use `/tournament close-dti-voting`. The bot records points and managers can advance winners in the bracket.'},
   {name:'➡️ Continue the tournament',value:'Review results, use `/tournament next-round`, and repeat the power-selection/start flow. The final rewards remain automatic: 1st 15 PT, 2nd 10 PT, 3rd 5 PT.'}
  ).setFooter({text:'DripCore • Managers can run /tournament guide at any time'});

@@ -205,7 +205,13 @@ async function updatePanel(client, t) {
 }
 
 async function handleCommand(interaction, client) {
-  const sub = interaction.options.getSubcommand();
+  const rawSub = interaction.options.getSubcommand();
+  const group = interaction.options.getSubcommandGroup(false);
+  const sub = group === 'roster'
+    ? (rawSub === 'add' ? 'roster-add' : rawSub === 'remove' ? 'roster-remove' : rawSub)
+    : group === 'bracket'
+      ? `bracket-${rawSub}`
+      : rawSub;
   const publicSubs = new Set(['leaderboard', 'participants', 'vote-dti', 'power', 'guide', 'bracket-view']);
   if (!publicSubs.has(sub) && !canManage(interaction)) {
     return interaction.reply({ content: '❌ Only tournament managers or server administrators can use this.', ephemeral: true });
@@ -268,7 +274,7 @@ async function handleCommand(interaction, client) {
   }
   if (sub === 'checkin-close') {
     const remove=interaction.options.getBoolean('remove_absent');db.prepare('UPDATE tournament_checkin_state SET open=0 WHERE tournament_id=?').run(t.id);const active=q.players.all(t.id),checked=new Set(db.prepare('SELECT user_id FROM tournament_checkins WHERE tournament_id=?').all(t.id).map(x=>x.user_id)),missing=active.filter(x=>!checked.has(x.user_id));if(remove&&missing.length){const up=db.prepare('UPDATE tournament_players SET active=0 WHERE tournament_id=? AND user_id=?');db.transaction(()=>missing.forEach(x=>up.run(t.id,x.user_id)))();}
-    return interaction.reply({embeds:[infoEmbed('Check-In Closed',`✅ Checked in: **${checked.size}**\n⚠️ Missing: **${missing.length}**${remove?'\nAbsent players were removed from the active roster.':'\nAbsent players were kept for manual review.'}\n\nNext: run \`/tournament bracket-generate\`.`)]});
+    return interaction.reply({embeds:[infoEmbed('Check-In Closed',`✅ Checked in: **${checked.size}**\n⚠️ Missing: **${missing.length}**${remove?'\nAbsent players were removed from the active roster.':'\nAbsent players were kept for manual review.'}\n\nNext: run \`/tournament bracket generate\`.`)]});
   }
   if (sub === 'bracket-generate' || sub === 'bracket-shuffle') {
     const old=bracket.state(t.id,t.current_round||2);if(old?.status==='approved')return interaction.reply({content:'❌ Unlock the bracket before changing it.',ephemeral:true});const rows=bracket.generate(t,q.players.all(t.id));return interaction.reply({embeds:[bracket.previewEmbed(t,rows)],ephemeral:true});
