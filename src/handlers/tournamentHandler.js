@@ -14,6 +14,7 @@ const db = require('../database/db');
 const { getConfig, setConfig } = require('../utils/config');
 const { successEmbed, errorEmbed, infoEmbed } = require('../utils/embeds');
 const eco = require('../services/economy');
+const bracket = require('../services/bracketManager');
 
 const GAMES = [
   '🔪 Murder Mystery 2',
@@ -205,7 +206,7 @@ async function updatePanel(client, t) {
 
 async function handleCommand(interaction, client) {
   const sub = interaction.options.getSubcommand();
-  const publicSubs = new Set(['leaderboard', 'participants', 'vote-dti', 'power']);
+  const publicSubs = new Set(['leaderboard', 'participants', 'vote-dti', 'power', 'guide', 'bracket-view']);
   if (!publicSubs.has(sub) && !canManage(interaction)) {
     return interaction.reply({ content: '❌ Only tournament managers or server administrators can use this.', ephemeral: true });
   }
@@ -243,6 +244,41 @@ async function handleCommand(interaction, client) {
   }
 
   if (!t) return interaction.reply({ content: '❌ There is no tournament configured.', ephemeral: true });
+
+  if (sub === 'guide') return interaction.reply({ embeds: [bracket.detailedGuide(t)], ephemeral: !canManage(interaction) });
+
+  if (sub === 'roster-add') {
+    const user=interaction.options.getUser('user'), username=interaction.options.getString('roblox_username');
+    const member=await interaction.guild.members.fetch(user.id).catch(()=>null);
+    db.prepare(`INSERT INTO tournament_players(tournament_id,user_id,display_name,roblox_username,joined_at,active) VALUES(?,?,?,?,?,1) ON CONFLICT(tournament_id,user_id) DO UPDATE SET display_name=excluded.display_name,roblox_username=excluded.roblox_username,active=1`).run(t.id,user.id,member?.displayName||user.username,username,Date.now());
+    if(member&&t.participant_role_id)await member.roles.add(t.participant_role_id).catch(()=>{});
+    return interaction.reply({embeds:[successEmbed('Player Added',`${user} is now active. Generate or shuffle the bracket again before approval.`)],ephemeral:true});
+  }
+  if (sub === 'roster-remove') {
+    const user=interaction.options.getUser('user'); db.prepare('UPDATE tournament_players SET active=0 WHERE tournament_id=? AND user_id=?').run(t.id,user.id); db.prepare('DELETE FROM tournament_checkins WHERE tournament_id=? AND user_id=?').run(t.id,user.id);
+    return interaction.reply({embeds:[successEmbed('No-Show Removed',`${user} was removed from the active roster. Existing scores/history were kept.`)],ephemeral:true});
+  }
+  if (sub === 'checkin-open') {
+    const mins=interaction.options.getInteger('minutes'), closes=Date.now()+mins*60000, channel=interaction.guild.channels.cache.get(t.channel_id)||interaction.channel;
+    db.prepare('DELETE FROM tournament_checkins WHERE tournament_id=?').run(t.id);
+    db.prepare(`INSERT INTO tournament_checkin_state(tournament_id,closes_at,open,channel_id) VALUES(?,?,1,?) ON CONFLICT(tournament_id) DO UPDATE SET closes_at=excluded.closes_at,open=1,channel_id=excluded.channel_id`).run(t.id,closes,channel.id);
+    const row=new ActionRowBuilder().addComponents(new ButtonBuilder().setCustomId(`tournament_checkin_${t.id}`).setLabel("I'm Ready").setEmoji('✅').setStyle(ButtonStyle.Success),new ButtonBuilder().setCustomId(`tournament_withdraw_${t.id}`).setLabel('Withdraw').setEmoji('🚪').setStyle(ButtonStyle.Secondary));
+    const msg=await channel.send({embeds:[infoEmbed('👗 DTI Player Check-In',`Press **I’m Ready** to confirm you are present and able to participate.\n\nThis does **not** start Dress to Impress and does **not** submit an outfit. Players who do not check in before <t:${Math.floor(closes/1000)}:F> may be removed before the bracket is generated.`)],components:[row]});
+    db.prepare('UPDATE tournament_checkin_state SET message_id=? WHERE tournament_id=?').run(msg.id,t.id);return interaction.reply({content:`✅ Check-in opened in ${channel}.`,ephemeral:true});
+  }
+  if (sub === 'checkin-close') {
+    const remove=interaction.options.getBoolean('remove_absent');db.prepare('UPDATE tournament_checkin_state SET open=0 WHERE tournament_id=?').run(t.id);const active=q.players.all(t.id),checked=new Set(db.prepare('SELECT user_id FROM tournament_checkins WHERE tournament_id=?').all(t.id).map(x=>x.user_id)),missing=active.filter(x=>!checked.has(x.user_id));if(remove&&missing.length){const up=db.prepare('UPDATE tournament_players SET active=0 WHERE tournament_id=? AND user_id=?');db.transaction(()=>missing.forEach(x=>up.run(t.id,x.user_id)))();}
+    return interaction.reply({embeds:[infoEmbed('Check-In Closed',`✅ Checked in: **${checked.size}**\n⚠️ Missing: **${missing.length}**${remove?'\nAbsent players were removed from the active roster.':'\nAbsent players were kept for manual review.'}\n\nNext: run \`/tournament bracket-generate\`.`)]});
+  }
+  if (sub === 'bracket-generate' || sub === 'bracket-shuffle') {
+    const old=bracket.state(t.id,t.current_round||2);if(old?.status==='approved')return interaction.reply({content:'❌ Unlock the bracket before changing it.',ephemeral:true});const rows=bracket.generate(t,q.players.all(t.id));return interaction.reply({embeds:[bracket.previewEmbed(t,rows)],ephemeral:true});
+  }
+  if (sub === 'bracket-view') {const rows=bracket.matches(t.id,t.current_round||2);return interaction.reply({embeds:[bracket.previewEmbed(t,rows)],ephemeral:canManage(interaction)});}
+  if (sub === 'bracket-edit') {
+    const round=t.current_round||2,st=bracket.state(t.id,round);if(st?.status==='approved')return interaction.reply({content:'❌ Unlock the bracket before editing.',ephemeral:true});const num=interaction.options.getInteger('match'),p1=interaction.options.getUser('player_one'),p2=interaction.options.getUser('player_two');if(!p1&&!p2)return interaction.reply({content:'❌ Select at least Player One.',ephemeral:true});db.prepare(`INSERT INTO tournament_bracket_matches(tournament_id,round_number,match_number,player1_id,player2_id,status,created_at,updated_at) VALUES(?,?,?,?,?,'pending',?,?) ON CONFLICT(tournament_id,round_number,match_number) DO UPDATE SET player1_id=excluded.player1_id,player2_id=excluded.player2_id,winner_id=NULL,status='pending',updated_at=excluded.updated_at`).run(t.id,round,num,p1?.id||p2.id,p1?p2?.id||null:null,Date.now(),Date.now());db.prepare(`INSERT INTO tournament_bracket_state(tournament_id,round_number,status,version,updated_at) VALUES(?,?,'preview',1,?) ON CONFLICT(tournament_id,round_number) DO UPDATE SET status='preview',version=version+1,updated_at=excluded.updated_at`).run(t.id,round,Date.now());return interaction.reply({embeds:[bracket.previewEmbed(t,bracket.matches(t.id,round))],ephemeral:true});
+  }
+  if (sub === 'bracket-approve') {const round=t.current_round||2,rows=bracket.matches(t.id,round);if(!rows.length)return interaction.reply({content:'❌ Generate a bracket first.',ephemeral:true});db.prepare("UPDATE tournament_bracket_state SET status='approved',updated_at=? WHERE tournament_id=? AND round_number=?").run(Date.now(),t.id,round);await bracket.publish(interaction,t);return interaction.reply({embeds:[successEmbed('Bracket Approved and Published','The matchups are official. Players should now select powers before the manager starts the game.')],ephemeral:true});}
+  if (sub === 'bracket-unlock') {const rs=q.roundState.get(t.id,t.current_round||2);if(rs?.submission_deadline&&Date.now()<rs.submission_deadline)return interaction.reply({content:'❌ Submissions are already active. Close or finish the submission stage before changing matchups.',ephemeral:true});db.prepare("UPDATE tournament_bracket_state SET status='preview',version=version+1,updated_at=? WHERE tournament_id=? AND round_number=?").run(Date.now(),t.id,t.current_round||2);return interaction.reply({content:'🔓 Bracket unlocked. All edits require approval again.',ephemeral:true});}
 
   if (sub === 'power') return selectPower(interaction, t, interaction.options.getString('choice'));
 
@@ -507,6 +543,12 @@ async function handleInteraction(interaction, client) {
     return interaction.reply({ embeds: [infoEmbed(`${t.name} Challengers`, lines.slice(0, 3900) || 'No challengers have registered yet.')], ephemeral: true });
   }
 
+
+
+  if (action === 'checkin') {
+    const cs=db.prepare('SELECT * FROM tournament_checkin_state WHERE tournament_id=?').get(t.id);if(!cs?.open||Date.now()>cs.closes_at)return interaction.reply({content:'❌ Check-in is closed.',ephemeral:true});const p=q.player.get(t.id,interaction.user.id);if(!p?.active)return interaction.reply({content:'❌ You are not on the active roster.',ephemeral:true});db.prepare(`INSERT INTO tournament_checkins(tournament_id,user_id,checked_in_at) VALUES(?,?,?) ON CONFLICT(tournament_id,user_id) DO UPDATE SET checked_in_at=excluded.checked_in_at`).run(t.id,interaction.user.id,Date.now());return interaction.reply({embeds:[successEmbed('Checked In','You are confirmed for this game. Wait for the official bracket and theme before starting.')],ephemeral:true});
+  }
+  if (action === 'withdraw') {db.prepare('UPDATE tournament_players SET active=0 WHERE tournament_id=? AND user_id=?').run(t.id,interaction.user.id);db.prepare('DELETE FROM tournament_checkins WHERE tournament_id=? AND user_id=?').run(t.id,interaction.user.id);return interaction.reply({embeds:[infoEmbed('Withdrawn','You were removed from the active roster. Contact a manager to be added back.')],ephemeral:true});}
 
   if (action === 'join') {
     if (t.status !== 'registration') return interaction.reply({ content: '❌ Registration is closed.', ephemeral: true });

@@ -77,6 +77,17 @@ module.exports = {
       .setName('end')
       .setDescription('End the tournament and announce the champion')
       .addUserOption(o => o.setName('winner').setDescription('Grand Finale winner').setRequired(true)))
+    .addSubcommand(sub => sub.setName('guide').setDescription('Show the detailed step-by-step tournament manager guide'))
+    .addSubcommand(sub => sub.setName('roster-add').setDescription('Add or reactivate an approved tournament player').addUserOption(o=>o.setName('user').setDescription('Player').setRequired(true)).addStringOption(o=>o.setName('roblox_username').setDescription('Roblox username').setRequired(true)))
+    .addSubcommand(sub => sub.setName('roster-remove').setDescription('Remove a no-show from the active tournament roster').addUserOption(o=>o.setName('user').setDescription('Player').setRequired(true)))
+    .addSubcommand(sub => sub.setName('checkin-open').setDescription('Open explained player check-in').addIntegerOption(o=>o.setName('minutes').setDescription('Check-in length').setRequired(true).setMinValue(1).setMaxValue(1440)))
+    .addSubcommand(sub => sub.setName('checkin-close').setDescription('Close check-in and optionally remove absent players').addBooleanOption(o=>o.setName('remove_absent').setDescription('Remove everyone who did not check in').setRequired(true)))
+    .addSubcommand(sub => sub.setName('bracket-generate').setDescription('Generate an editable written bracket preview'))
+    .addSubcommand(sub => sub.setName('bracket-view').setDescription('View the current written bracket'))
+    .addSubcommand(sub => sub.setName('bracket-shuffle').setDescription('Shuffle and regenerate the unlocked bracket'))
+    .addSubcommand(sub => sub.setName('bracket-edit').setDescription('Edit one matchup before it is locked').addIntegerOption(o=>o.setName('match').setDescription('Match number').setRequired(true).setMinValue(1)).addUserOption(o=>o.setName('player_one').setDescription('First player')).addUserOption(o=>o.setName('player_two').setDescription('Second player; leave blank for a bye')))
+    .addSubcommand(sub => sub.setName('bracket-approve').setDescription('Approve, lock, and publish the current bracket'))
+    .addSubcommand(sub => sub.setName('bracket-unlock').setDescription('Unlock the bracket before submissions begin'))
     .addSubcommand(sub => sub.setName('delete').setDescription('Delete the tournament data and panel')),
 
   async execute(interaction, client) {

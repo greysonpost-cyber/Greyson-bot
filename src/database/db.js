@@ -211,3 +211,36 @@ CREATE TABLE IF NOT EXISTS token_leaderboard_messages (
 `);
 
 module.exports = db;
+
+
+// Editable brackets, check-ins, and artifact direct offers.
+db.exec(`
+CREATE TABLE IF NOT EXISTS tournament_bracket_state (
+  tournament_id INTEGER NOT NULL, round_number INTEGER NOT NULL,
+  status TEXT NOT NULL DEFAULT 'preview', version INTEGER NOT NULL DEFAULT 1,
+  channel_id TEXT, message_id TEXT, updated_at INTEGER NOT NULL,
+  PRIMARY KEY(tournament_id,round_number)
+);
+CREATE TABLE IF NOT EXISTS tournament_bracket_matches (
+  id INTEGER PRIMARY KEY AUTOINCREMENT, tournament_id INTEGER NOT NULL,
+  round_number INTEGER NOT NULL, match_number INTEGER NOT NULL,
+  player1_id TEXT, player2_id TEXT, winner_id TEXT,
+  status TEXT NOT NULL DEFAULT 'pending', created_at INTEGER NOT NULL, updated_at INTEGER NOT NULL,
+  UNIQUE(tournament_id,round_number,match_number)
+);
+CREATE TABLE IF NOT EXISTS tournament_checkins (
+  tournament_id INTEGER NOT NULL, user_id TEXT NOT NULL, checked_in_at INTEGER NOT NULL,
+  PRIMARY KEY(tournament_id,user_id)
+);
+CREATE TABLE IF NOT EXISTS tournament_checkin_state (
+  tournament_id INTEGER PRIMARY KEY, closes_at INTEGER NOT NULL, open INTEGER NOT NULL DEFAULT 1,
+  channel_id TEXT, message_id TEXT
+);
+CREATE TABLE IF NOT EXISTS artifact_offers (
+  id INTEGER PRIMARY KEY AUTOINCREMENT, guild_id TEXT NOT NULL,
+  sender_id TEXT NOT NULL, recipient_id TEXT NOT NULL,
+  wanted_artifact_id INTEGER NOT NULL, offered_artifact_id INTEGER,
+  tokens INTEGER NOT NULL DEFAULT 0, message TEXT,
+  status TEXT NOT NULL DEFAULT 'pending', created_at INTEGER NOT NULL, resolved_at INTEGER
+);
+`);

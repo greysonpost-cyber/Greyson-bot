@@ -67,7 +67,8 @@ module.exports = {
             }
             if (customId === 'econ_token_leaderboard') return economyHandler.handle(interaction, client);
             if (customId.startsWith('wheel_')) return wheelHandler.handleInteraction(interaction, client);
-            if (customId.startsWith('token_drop:')) return tokenDrops.handleInteraction(interaction, client);
+            if (customId.startsWith('artifactoffer_')) return require('../services/artifactOfferHandler').handle(interaction, client);
+            if (customId.startsWith('token_drop:')) return; // legacy button drops are disabled; use /pick
             if (customId.startsWith('tournament_')) return tournamentHandler.handleInteraction(interaction, client);
         } catch (err) {
             console.error('[interactionCreate] Error:', err);

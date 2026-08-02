@@ -1,0 +1,29 @@
+DRIPCORE TOURNAMENT / OFFERS / TOKEN DROP PATCH
+
+1. Upload the included src folder into your repository root and replace matching files.
+2. Keep your database/volume. New tables are created automatically.
+3. Run: npm run deploy
+4. Restart/redeploy the bot.
+
+NEW COMMANDS
+/tournament guide
+/tournament roster-add
+/tournament roster-remove
+/tournament checkin-open
+/tournament checkin-close
+/tournament bracket-generate
+/tournament bracket-view
+/tournament bracket-shuffle
+/tournament bracket-edit
+/tournament bracket-approve
+/tournament bracket-unlock
+/artifact-offer send
+/artifact-offer view
+/artifact-offer cancel
+/pick
+
+TOKEN DROPS
+Exactly 1 PT, randomly every 10-25 minutes, 15 seconds to type /pick in the configured general channel.
+
+MINIGAMES
+Every successful minigame winner receives exactly 1 PT (subject to the existing daily cap).
