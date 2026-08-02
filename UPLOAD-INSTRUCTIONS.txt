@@ -1,42 +1,36 @@
-DRIPCORE COLLECTION ROLE REWARDS PATCH
-======================================
+DRIPCORE — DTI PRIVATE DASHBOARD PATCH
 
-1. Upload the included src folder into the root of your current repository.
-2. Replace the matching files when prompted.
-3. Run: npm run deploy
-4. Restart/redeploy the bot.
+1. Extract this ZIP.
+2. Upload the included src folder into the ROOT of your GitHub repository.
+3. Replace the two matching files when prompted.
+4. Push/commit the changes and redeploy Railway.
+5. Run: npm run deploy
 
-The database table is created automatically when the bot starts.
+NEW / UPDATED COMMANDS
+- /tournament open-dti theme:<theme> minutes:<time>
+- /tournament extend-dti minutes:<minutes>
+- /tournament close-dti
+- /tournament dti-status
 
-SET UP THE SPIDER-VERSE REWARD
-------------------------------
-Use:
+WHAT PLAYERS RECEIVE
+- A private DTI dashboard in DMs showing:
+  • Theme
+  • Assigned opponent/match number
+  • Deadline
+  • Submission status
+  • Exact screenshot-submission steps
+- Submit Outfit button
+- Replace Submission button after submitting
+- View My Submission button
+- View Rules button
 
-/collection reward set
-collection: Spider-Verse
-role: @Your Collection Role
-remove_if_incomplete: Yes
+MANAGER CONTROLS
+- Submission Status
+- Extend 5 Minutes
+- Close Now
 
-The bot immediately checks existing owners. After setup, it automatically
-checks both the old and new owner whenever an artifact is transferred, bought,
-or traded.
-
-OTHER COMMANDS
---------------
-/collection reward view
-/collection reward sync collection:Spider-Verse
-/collection reward remove collection:Spider-Verse
-
-HOW COMPLETION WORKS
---------------------
-A member must own at least one copy of every artifact TYPE in the collection.
-For Spider-Verse, that means one Spider-Man, one Web Slinger, and one Friendly
-Neighborhood. Owning duplicate copies does not replace a missing artifact type.
-
-By default, the reward role is removed if the member later loses part of the
-collection. Set remove_if_incomplete to No to make the role permanent once earned.
-
-BOT PERMISSIONS
----------------
-The bot needs Manage Roles, and its highest role must be above the configured
-collection reward role.
+NOTES
+- Players must have server DMs enabled to receive the automatic private dashboard.
+- Players with DMs disabled can still use the public Submit Outfit button.
+- No database/schema update is required.
+- Existing submissions and tournament data are preserved.

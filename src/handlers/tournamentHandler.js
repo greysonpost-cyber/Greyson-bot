@@ -39,6 +39,127 @@ const q = {
 
 const activeSubmissionCollectors = new Map();
 
+function dtiOpponent(tournamentId, userId) {
+  const match = db.prepare(`SELECT * FROM tournament_bracket_matches
+    WHERE tournament_id=? AND round_number=2 AND (player1_id=? OR player2_id=?)
+    ORDER BY match_number LIMIT 1`).get(tournamentId, userId, userId);
+  if (!match) return { label: 'Not assigned yet', matchNumber: null, bye: false };
+  const opponentId = match.player1_id === userId ? match.player2_id : match.player1_id;
+  return {
+    label: opponentId ? `<@${opponentId}>` : '⭐ BYE — automatically advances',
+    opponentId,
+    matchNumber: match.match_number,
+    bye: !opponentId,
+  };
+}
+
+function dtiPlayerComponents(t, userId) {
+  const existing = q.dtiSubmissionByUser.get(t.id, userId);
+  return [new ActionRowBuilder().addComponents(
+    new ButtonBuilder()
+      .setCustomId(`tournament_dtisubmit_${t.id}`)
+      .setLabel(existing ? 'Replace Submission' : 'Submit Outfit')
+      .setEmoji(existing ? '🔄' : '📤')
+      .setStyle(existing ? ButtonStyle.Primary : ButtonStyle.Success),
+    new ButtonBuilder()
+      .setCustomId(`tournament_dtiview_${t.id}`)
+      .setLabel('View My Submission')
+      .setEmoji('👀')
+      .setStyle(ButtonStyle.Secondary),
+    new ButtonBuilder()
+      .setCustomId(`tournament_dtirules_${t.id}`)
+      .setLabel('View Rules')
+      .setEmoji('📖')
+      .setStyle(ButtonStyle.Secondary),
+  )];
+}
+
+function dtiDashboardEmbed(t, state, userId) {
+  const opponent = dtiOpponent(t.id, userId);
+  const submission = q.dtiSubmissionByUser.get(t.id, userId);
+  const deadline = state?.submission_deadline;
+  const deadlineText = deadline ? `<t:${Math.floor(deadline / 1000)}:F>\n<t:${Math.floor(deadline / 1000)}:R>` : 'Not opened';
+  const status = submission
+    ? `✅ **Submitted** <t:${Math.floor(submission.submitted_at / 1000)}:R>\nYou may replace it before the deadline.`
+    : '⏳ **Not submitted yet**\nPress **Submit Outfit**, then send one image in your DM with DripCore.';
+  return new EmbedBuilder()
+    .setColor(submission ? 0x22c55e : 0x8b1cfb)
+    .setAuthor({ name: '👗 DRIPCORE • PRIVATE DTI DASHBOARD' })
+    .setTitle(`${t.name} — Dress to Impress`)
+    .setDescription(`Create an outfit that clearly matches the theme. Your screenshot remains private until anonymous voting begins.`)
+    .addFields(
+      { name: '🎨 Theme', value: `**${state?.theme || 'Not announced'}**`, inline: true },
+      { name: '⚔️ Your Matchup', value: `${opponent.matchNumber ? `Match **${opponent.matchNumber}**\n` : ''}${opponent.label}`, inline: true },
+      { name: '⏰ Deadline', value: deadlineText, inline: true },
+      { name: '📸 Submission Status', value: status, inline: false },
+      { name: '✅ How to Submit', value: '1. Finish your outfit in Dress to Impress.\n2. Take **one clear screenshot** showing your full avatar.\n3. Press **Submit Outfit** below.\n4. DripCore will ask you to send the image in this DM.\n5. Wait for the **Submission Saved** confirmation.', inline: false },
+      { name: '🔒 Privacy', value: 'Do not post your outfit publicly or reveal which anonymous entry is yours. Live vote totals stay hidden.', inline: false },
+    )
+    .setFooter({ text: `Tournament #${t.id} • Only images received before the deadline count` })
+    .setTimestamp();
+}
+
+function dtiPublicEmbed(t, state, players) {
+  const unix = Math.floor(state.submission_deadline / 1000);
+  const submitted = q.dtiSubmissions.all(t.id).length;
+  return new EmbedBuilder()
+    .setColor(0xd0002a)
+    .setAuthor({ name: '👗 DRIPCORE • SUMMER CHAMPIONSHIP' })
+    .setTitle('DRESS TO IMPRESS — SUBMISSIONS OPEN')
+    .setDescription(`━━━━━━━━━━━━━━━━━━━━\n### 🎨 Theme: **${state.theme}**\n### ⏰ Closes: <t:${unix}:R>\n━━━━━━━━━━━━━━━━━━━━`)
+    .addFields(
+      { name: '📤 How to submit', value: 'Press **Submit Outfit** below. DripCore will DM you. Send **one image attachment** showing your complete outfit. Do **not** post it in the tournament channel.', inline: false },
+      { name: '🔄 Replacements', value: 'You may press **Replace Submission** and send a newer screenshot any time before the deadline. The newest accepted image becomes your official entry.', inline: false },
+      { name: '⚔️ Matchups', value: 'You compete only against the opponent shown on your private dashboard. Entries will be displayed anonymously for voting.', inline: false },
+      { name: '📊 Live status', value: `**${submitted}/${players.length}** active players submitted`, inline: false },
+    )
+    .setFooter({ text: 'Late screenshots are rejected automatically • Keep your outfit secret' })
+    .setTimestamp();
+}
+
+function dtiManagerComponents(t) {
+  return [new ActionRowBuilder().addComponents(
+    new ButtonBuilder().setCustomId(`tournament_dtistatus_${t.id}`).setLabel('Submission Status').setEmoji('📊').setStyle(ButtonStyle.Primary),
+    new ButtonBuilder().setCustomId(`tournament_dtiextend_${t.id}`).setLabel('Extend 5 Minutes').setEmoji('⏱️').setStyle(ButtonStyle.Secondary),
+    new ButtonBuilder().setCustomId(`tournament_dticlose_${t.id}`).setLabel('Close Now').setEmoji('🔒').setStyle(ButtonStyle.Danger),
+  )];
+}
+
+async function sendDtiDashboards(client, t, state) {
+  const players = q.players.all(t.id);
+  let sent = 0;
+  let failed = 0;
+  for (const player of players) {
+    try {
+      const user = await client.users.fetch(player.user_id);
+      const dm = await user.createDM();
+      await dm.send({ embeds: [dtiDashboardEmbed(t, state, player.user_id)], components: dtiPlayerComponents(t, player.user_id) });
+      sent += 1;
+    } catch {
+      failed += 1;
+    }
+  }
+  return { sent, failed, total: players.length };
+}
+
+function dtiStatusEmbed(t) {
+  const players = q.players.all(t.id);
+  const submissions = q.dtiSubmissions.all(t.id);
+  const submittedIds = new Set(submissions.map(s => s.user_id));
+  const submitted = players.filter(p => submittedIds.has(p.user_id));
+  const missing = players.filter(p => !submittedIds.has(p.user_id));
+  return new EmbedBuilder()
+    .setColor(missing.length ? 0xf59e0b : 0x22c55e)
+    .setAuthor({ name: '👗 DTI • MANAGER SUBMISSION STATUS' })
+    .setTitle(`${submitted.length}/${players.length} Outfits Received`)
+    .addFields(
+      { name: `✅ Submitted (${submitted.length})`, value: submitted.map(p => `<@${p.user_id}>`).join(' ') || 'None', inline: false },
+      { name: `⏳ Missing (${missing.length})`, value: missing.map(p => `<@${p.user_id}>`).join(' ') || 'Nobody — everyone is ready!', inline: false },
+    )
+    .setFooter({ text: 'Use /tournament extend-dti or /tournament close-dti when needed' })
+    .setTimestamp();
+}
+
 const POWER_COSTS = { shield: 10, double_points: 5 };
 function selectedPower(tournamentId, roundNumber, userId) {
   return db.prepare('SELECT * FROM tournament_round_powers WHERE tournament_id=? AND round_number=? AND user_id=?').get(tournamentId, roundNumber, userId);
@@ -346,24 +467,47 @@ Loser: ${loser} — **${loserPoints} pts**${shieldUsed ? '\n🛡️ Their Shield
     const theme = interaction.options.getString('theme');
     const minutes = interaction.options.getInteger('minutes');
     const deadline = Date.now() + minutes * 60_000;
-    db.prepare(`INSERT INTO tournament_round_state (tournament_id,round_number,theme,submission_deadline,voting_open,voting_closed,created_at) VALUES (?,2,?,?,0,0,?) ON CONFLICT(tournament_id,round_number) DO UPDATE SET theme=excluded.theme,submission_deadline=excluded.submission_deadline,voting_open=0,voting_closed=0`).run(t.id, theme, deadline, Date.now());
-    const unix = Math.floor(deadline / 1000);
-    const components = [new ActionRowBuilder().addComponents(
-      new ButtonBuilder()
-        .setCustomId(`tournament_dtisubmit_${t.id}`)
-        .setLabel('Submit Outfit')
-        .setEmoji('🖼️')
-        .setStyle(ButtonStyle.Success),
-      new ButtonBuilder()
-        .setCustomId(`tournament_dtirules_${t.id}`)
-        .setLabel('View Rules')
-        .setEmoji('📜')
-        .setStyle(ButtonStyle.Secondary),
-    )];
-    return interaction.reply({
-      content: `👗 **Dress to Impress submissions are open!**\n**Theme:** ${theme}\n**Deadline:** <t:${unix}:F> (<t:${unix}:R>)\n\nClick **Submit Outfit** below. DripCore will privately DM you and collect your screenshot there, so other players cannot see whose entry it is.\n\nThe bot rejects every screenshot received after the deadline. You may replace your entry by clicking the button again before time expires.`,
-      components,
+    db.prepare(`INSERT INTO tournament_round_state (tournament_id,round_number,theme,submission_deadline,voting_open,voting_closed,created_at)
+      VALUES (?,2,?,?,0,0,?)
+      ON CONFLICT(tournament_id,round_number) DO UPDATE SET
+        theme=excluded.theme,submission_deadline=excluded.submission_deadline,voting_open=0,voting_closed=0`)
+      .run(t.id, theme, deadline, Date.now());
+    const state = q.roundState.get(t.id, 2);
+    const players = q.players.all(t.id);
+    const publicComponents = [
+      ...dtiPlayerComponents(t, interaction.user.id),
+      ...dtiManagerComponents(t),
+    ];
+    await interaction.reply({ embeds: [dtiPublicEmbed(t, state, players)], components: publicComponents });
+    const delivery = await sendDtiDashboards(client, t, state);
+    await interaction.followUp({
+      content: `📩 Private DTI dashboards sent: **${delivery.sent}/${delivery.total}**.${delivery.failed ? `\n⚠️ **${delivery.failed}** player(s) have DMs disabled. They can still use the public **Submit Outfit** button.` : ''}`,
+      ephemeral: true,
     });
+    return;
+  }
+
+  if (sub === 'extend-dti') {
+    const state = q.roundState.get(t.id, 2);
+    if (!state?.submission_deadline || state.voting_open || state.voting_closed) return interaction.reply({ content: '❌ There is no open DTI submission window to extend.', ephemeral: true });
+    const minutes = interaction.options.getInteger('minutes');
+    const base = Math.max(Date.now(), state.submission_deadline);
+    const deadline = base + minutes * 60_000;
+    db.prepare('UPDATE tournament_round_state SET submission_deadline=? WHERE tournament_id=? AND round_number=2').run(deadline, t.id);
+    await interaction.reply({ embeds: [successEmbed('DTI Deadline Extended', `Added **${minutes} minute(s)**.\nNew deadline: <t:${Math.floor(deadline / 1000)}:F> (<t:${Math.floor(deadline / 1000)}:R>)`)] });
+    return;
+  }
+
+  if (sub === 'close-dti') {
+    const state = q.roundState.get(t.id, 2);
+    if (!state?.submission_deadline || state.voting_open || state.voting_closed) return interaction.reply({ content: '❌ There is no open DTI submission window.', ephemeral: true });
+    db.prepare('UPDATE tournament_round_state SET submission_deadline=? WHERE tournament_id=? AND round_number=2').run(Date.now(), t.id);
+    await interaction.reply({ embeds: [infoEmbed('🔒 DTI Submissions Closed', 'No new screenshots or replacements can be accepted. Review `/tournament dti-status`, then use `/tournament open-dti-voting` when ready.')] });
+    return;
+  }
+
+  if (sub === 'dti-status') {
+    return interaction.reply({ embeds: [dtiStatusEmbed(t)], ephemeral: true });
   }
 
   if (sub === 'open-dti-voting') {
@@ -583,10 +727,56 @@ async function handleInteraction(interaction, client) {
     const deadlineText = state?.submission_deadline
       ? `<t:${Math.floor(state.submission_deadline / 1000)}:F> (<t:${Math.floor(state.submission_deadline / 1000)}:R>)`
       : 'Not opened yet';
-    return interaction.reply({
-      content: `**👗 Dress to Impress Rules**\n\n• Create one outfit matching the announced theme.\n• Click **Submit Outfit** and send one screenshot to DripCore in DMs.\n• Your screenshot stays private until the anonymous gallery is posted.\n• You may replace your entry only before the deadline.\n• No late entries are accepted.\n• Do not tell people which anonymous outfit belongs to you.\n• During voting, you cannot vote for yourself.\n• Votes and live totals remain secret.\n\n**Submission deadline:** ${deadlineText}`,
-      ephemeral: true,
-    });
+    const embed = new EmbedBuilder()
+      .setColor(0x6a00ff)
+      .setAuthor({ name: '👗 DRIPCORE • DTI RULES' })
+      .setTitle(state?.theme ? `Theme: ${state.theme}` : 'Dress to Impress')
+      .setDescription('Your goal is to create the strongest outfit for the announced theme and defeat the opponent assigned in your bracket matchup.')
+      .addFields(
+        { name: '📤 Exact submission steps', value: '1. Finish your outfit in Roblox.\n2. Take **one clear screenshot** showing your full avatar.\n3. Press **Submit Outfit**.\n4. Check your DM from DripCore.\n5. Send the screenshot as an **image attachment** in that DM.\n6. Wait until DripCore says it was saved.', inline: false },
+        { name: '🔄 Replacing an outfit', value: 'Before the deadline, press **Replace Submission** and send a new image. Your newest accepted screenshot replaces the old one.', inline: false },
+        { name: '🚫 Not allowed', value: 'No late entries, copying another player, public outfit reveals, telling voters which entry is yours, or submitting someone else’s outfit.', inline: false },
+        { name: '🗳️ Voting', value: 'Outfits are posted anonymously. You cannot vote for yourself. Votes and live totals stay private until managers close voting.', inline: false },
+        { name: '⏰ Deadline', value: deadlineText, inline: false },
+      )
+      .setFooter({ text: 'A screenshot is not submitted until DripCore confirms it was saved' });
+    return interaction.reply({ embeds: [embed], ephemeral: interaction.inGuild() });
+  }
+
+  if (action === 'dtiview') {
+    const submission = q.dtiSubmissionByUser.get(t.id, interaction.user.id);
+    if (!submission) return interaction.reply({ content: '❌ You have not submitted an outfit yet. Press **Submit Outfit** first.', ephemeral: interaction.inGuild() });
+    const state = q.roundState.get(t.id, 2);
+    const embed = new EmbedBuilder()
+      .setColor(0x22c55e)
+      .setAuthor({ name: '👗 DRIPCORE • YOUR PRIVATE SUBMISSION' })
+      .setTitle(state?.theme ? `Theme: ${state.theme}` : 'Dress to Impress Entry')
+      .setDescription(`✅ Saved <t:${Math.floor(submission.submitted_at / 1000)}:R>${submission.caption ? `\n\n**Caption:** ${submission.caption}` : ''}`)
+      .setImage(submission.image_url)
+      .setFooter({ text: 'Only you can access this preview before anonymous voting' });
+    return interaction.reply({ embeds: [embed], ephemeral: interaction.inGuild() });
+  }
+
+  if (action === 'dtistatus') {
+    if (!canManage(interaction)) return interaction.reply({ content: '❌ Only Tournament Managers can view the full submission status.', ephemeral: true });
+    return interaction.reply({ embeds: [dtiStatusEmbed(t)], ephemeral: true });
+  }
+
+  if (action === 'dtiextend') {
+    if (!canManage(interaction)) return interaction.reply({ content: '❌ Only Tournament Managers can extend the deadline.', ephemeral: true });
+    const state = q.roundState.get(t.id, 2);
+    if (!state?.submission_deadline || state.voting_open || state.voting_closed) return interaction.reply({ content: '❌ Submissions are not open.', ephemeral: true });
+    const deadline = Math.max(Date.now(), state.submission_deadline) + 5 * 60_000;
+    db.prepare('UPDATE tournament_round_state SET submission_deadline=? WHERE tournament_id=? AND round_number=2').run(deadline, t.id);
+    return interaction.reply({ embeds: [successEmbed('Extended by 5 Minutes', `New deadline: <t:${Math.floor(deadline / 1000)}:F> (<t:${Math.floor(deadline / 1000)}:R>)`)] });
+  }
+
+  if (action === 'dticlose') {
+    if (!canManage(interaction)) return interaction.reply({ content: '❌ Only Tournament Managers can close submissions.', ephemeral: true });
+    const state = q.roundState.get(t.id, 2);
+    if (!state?.submission_deadline || state.voting_open || state.voting_closed) return interaction.reply({ content: '❌ Submissions are not open.', ephemeral: true });
+    db.prepare('UPDATE tournament_round_state SET submission_deadline=? WHERE tournament_id=? AND round_number=2').run(Date.now(), t.id);
+    return interaction.reply({ embeds: [infoEmbed('🔒 Submissions Closed', 'No new entries or replacements can be accepted. Review the status, then open anonymous voting.')] });
   }
 
   if (action === 'dtisubmit') {
@@ -630,7 +820,14 @@ async function handleInteraction(interaction, client) {
       }
       const caption = message.content?.trim().slice(0, 80) || null;
       db.prepare(`INSERT INTO tournament_submissions (tournament_id,round_number,user_id,image_url,caption,submitted_at) VALUES (?,2,?,?,?,?) ON CONFLICT(tournament_id,round_number,user_id) DO UPDATE SET image_url=excluded.image_url,caption=excluded.caption,submitted_at=excluded.submitted_at`).run(t.id, interaction.user.id, image.url, caption, Date.now());
-      return message.reply(`✅ Your outfit was saved privately. You may replace it by clicking **Submit Outfit** again before <t:${Math.floor(freshState.submission_deadline / 1000)}:F>.`);
+      const savedEmbed = new EmbedBuilder()
+        .setColor(0x22c55e)
+        .setAuthor({ name: '👗 DRIPCORE • SUBMISSION SAVED' })
+        .setTitle('✅ Your Outfit Is Officially Submitted')
+        .setDescription(`Theme: **${freshState.theme || 'Not specified'}**\nSaved: <t:${Math.floor(Date.now() / 1000)}:R>\nDeadline: <t:${Math.floor(freshState.submission_deadline / 1000)}:R>\n\nYou may replace this image before the deadline by pressing **Replace Submission**.`)
+        .setImage(image.url)
+        .setFooter({ text: 'Keep your outfit secret until anonymous voting begins' });
+      return message.reply({ embeds: [savedEmbed] });
     });
 
     collector.on('end', async (_collected, reason) => {
