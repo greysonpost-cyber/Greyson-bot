@@ -1,36 +1,15 @@
-DRIPCORE — DTI PRIVATE DASHBOARD PATCH
+DRIPCORE DTI DM SUBMISSION FIX
 
-1. Extract this ZIP.
-2. Upload the included src folder into the ROOT of your GitHub repository.
-3. Replace the two matching files when prompted.
-4. Push/commit the changes and redeploy Railway.
-5. Run: npm run deploy
+1. Open this ZIP.
+2. Upload the included src folder into the root of your GitHub repository.
+3. Replace src/index.js when prompted.
+4. Redeploy/restart Railway.
+5. You do NOT need to run npm run deploy because no slash commands changed.
 
-NEW / UPDATED COMMANDS
-- /tournament open-dti theme:<theme> minutes:<time>
-- /tournament extend-dti minutes:<minutes>
-- /tournament close-dti
-- /tournament dti-status
+WHY IT FAILED
+The bot could send DMs, but it did not subscribe to incoming Direct Message events.
+The DTI collector therefore never saw the screenshot message.
 
-WHAT PLAYERS RECEIVE
-- A private DTI dashboard in DMs showing:
-  • Theme
-  • Assigned opponent/match number
-  • Deadline
-  • Submission status
-  • Exact screenshot-submission steps
-- Submit Outfit button
-- Replace Submission button after submitting
-- View My Submission button
-- View Rules button
-
-MANAGER CONTROLS
-- Submission Status
-- Extend 5 Minutes
-- Close Now
-
-NOTES
-- Players must have server DMs enabled to receive the automatic private dashboard.
-- Players with DMs disabled can still use the public Submit Outfit button.
-- No database/schema update is required.
-- Existing submissions and tournament data are preserved.
+AFTER RESTARTING
+Press Submit Outfit again, then send one image attachment in the bot DM.
+The bot should reply with the green Submission Saved embed.
