@@ -32,6 +32,23 @@ async function syncRole(guild, userId, roleId) {
 }
 
 function collectionProgress(guildId, userId, collectionName) {
+  // The Punisher is an alternate completion path for Spider-Verse, not a fourth requirement.
+  // A member completes Spider-Verse by owning the original three OR The Punisher alone.
+  if (String(collectionName).trim().toLowerCase() === 'spider-verse') {
+    const hasPunisher = ownsNamed(guildId, userId, 'The Punisher');
+    const hasSpiderMan = ownsNamed(guildId, userId, 'Spider-Man');
+    const hasWebSlinger = ownsNamed(guildId, userId, 'Web Slinger') || ownsNamed(guildId, userId, 'Web Swing');
+    const hasFriendlyNeighborhood = ownsNamed(guildId, userId, 'Friendly Neighborhood');
+    const originalOwned = [hasSpiderMan, hasWebSlinger, hasFriendlyNeighborhood].filter(Boolean).length;
+    return {
+      total: 3,
+      owned: hasPunisher ? 3 : originalOwned,
+      complete: hasPunisher || (hasSpiderMan && hasWebSlinger && hasFriendlyNeighborhood),
+      alternateComplete: hasPunisher,
+      requirements: { hasPunisher, hasSpiderMan, hasWebSlinger, hasFriendlyNeighborhood }
+    };
+  }
+
   const total = db.prepare(`SELECT COUNT(*) c FROM artifact_types
     WHERE guild_id=? AND lower(collection_name)=lower(?)`).get(guildId, collectionName).c;
   const ownedTypes = db.prepare(`SELECT COUNT(DISTINCT t.id) c FROM artifact_types t

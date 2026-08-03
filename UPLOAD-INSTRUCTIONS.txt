@@ -1,31 +1,25 @@
-DRIPCORE CRASH + ROUND 4 + TRADING PATCH
+DRIPCORE PRISMATIC PUNISHER + INVENTORY PATCH
 
-1. Extract this ZIP.
-2. Upload the included src folder into your GitHub repository root.
-3. Replace matching files. Do not delete your data folder or Railway volume.
-4. Redeploy/restart Railway.
-5. Run: npm run deploy
+1. Upload the included src folder into the ROOT of your GitHub repository.
+2. Replace the matching files.
+3. Restart/redeploy Railway.
+4. Run: npm run deploy
 
-CRASH FIX
-- Fixes SQLite: no such column: "active" by using the correct SQL string literal.
+CREATE THE ONE-OF-ONE:
+/artifact create-punisher role:@The Punisher price:100
 
-ROUND 4
-- /round4 open theme:<theme> minutes:<minutes>
-- /round4 submit image:<attachment> caption:<optional>
-- /round4 view
-- /round4 status
-- /round4 extend minutes:<minutes>
-- /round4 close
-This submission system accepts the screenshot directly in the slash command, avoiding DM collector problems.
+The command creates exactly one numbered copy and replies with both its Type ID and Artifact ID.
 
-OWNER OVERRIDE
-- /owner-trade artifact-for-tokens
-- /owner-trade transfer-artifact
-- /owner-trade tokens
-Restricted to server owner or IDs in OWNER_IDS. Every action is audited and the affected member receives a DM receipt when possible.
+SPIDER-VERSE ROLE RULE:
+A user qualifies by owning either:
+- Spider-Man + Web Slinger/Web Swing + Friendly Neighborhood, OR
+- The Punisher alone.
 
-TRADING IMPROVEMENTS
-- /trade view
-- /trade clear-tokens
-- /trade cancel
-Existing two-user Ready + 15-second Final Confirm system remains.
+The Punisher is NOT a fourth requirement.
+
+After creating or transferring it, run this once if needed:
+/collection reward sync collection:Spider-Verse
+
+INVENTORY:
+/artifact collection
+Now shows the unique Artifact ID, rarity, collection, passive, and trade/listing status for every owned copy.

@@ -89,10 +89,25 @@ module.exports = {
 
       await interaction.deferReply({ ephemeral: true });
       const result = await arts.syncCollectionMembers(interaction.guild, collectionName);
+      const spiderVerse = collectionName.toLowerCase() === 'spider-verse';
       return interaction.editReply({
-        content: `✅ **${collectionName}** now awards ${role} when all **${typeCount}** artifact types are owned.\n` +
-          `Role removal when incomplete: **${removeIfIncomplete ? 'Enabled' : 'Disabled'}**\n` +
-          `Initial sync: checked **${result.checked}**, granted **${result.granted}**, removed **${result.removed}**.`
+        content: spiderVerse
+          ? `✅ **Spider-Verse** now awards ${role} through either completion path:
+` +
+            `• **Spider-Man + Web Slinger/Web Swing + Friendly Neighborhood**
+` +
+            `• **The Punisher** by itself
+` +
+            `The Punisher is not a fourth requirement.
+` +
+            `Role removal when incomplete: **${removeIfIncomplete ? 'Enabled' : 'Disabled'}**
+` +
+            `Initial sync: checked **${result.checked}**, granted **${result.granted}**, removed **${result.removed}**.`
+          : `✅ **${collectionName}** now awards ${role} when all **${typeCount}** artifact types are owned.
+` +
+            `Role removal when incomplete: **${removeIfIncomplete ? 'Enabled' : 'Disabled'}**
+` +
+            `Initial sync: checked **${result.checked}**, granted **${result.granted}**, removed **${result.removed}**.`
       });
     }
 
@@ -131,7 +146,9 @@ module.exports = {
     return interaction.reply({
       content: rows.length
         ? `🏆 **Collection Rewards**\n${rows.map(row =>
-            `• **${row.collection_name}** (${row.type_count} artifacts) → <@&${row.role_id}> • Remove if incomplete: **${row.remove_if_incomplete ? 'Yes' : 'No'}**`
+            row.collection_name.toLowerCase() === 'spider-verse'
+              ? `• **Spider-Verse** (original 3 OR The Punisher) → <@&${row.role_id}> • Remove if incomplete: **${row.remove_if_incomplete ? 'Yes' : 'No'}**`
+              : `• **${row.collection_name}** (${row.type_count} artifacts) → <@&${row.role_id}> • Remove if incomplete: **${row.remove_if_incomplete ? 'Yes' : 'No'}**`
           ).join('\n')}`
         : '🏆 No collection rewards are configured yet.',
       ephemeral: true
