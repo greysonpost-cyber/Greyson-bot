@@ -1,24 +1,31 @@
-DRIPCORE TOURNAMENT EDIT POINTS PATCH
+DRIPCORE CRASH + ROUND 4 + TRADING PATCH
 
-1. Open your GitHub bot repository.
-2. Upload the included src folder into the repository root.
-3. Replace the two matching files when GitHub asks.
+1. Extract this ZIP.
+2. Upload the included src folder into your GitHub repository root.
+3. Replace matching files. Do not delete your data folder or Railway volume.
 4. Redeploy/restart Railway.
 5. Run: npm run deploy
 
-NEW COMMAND
-/tournament edit-points
+CRASH FIX
+- Fixes SQLite: no such column: "active" by using the correct SQL string literal.
 
-Options:
-- user: player to edit
-- category: displayed total, contribution, or rounds 1-4
-- action: set, add, or remove
-- amount: number of points
-- reason: optional audit note
+ROUND 4
+- /round4 open theme:<theme> minutes:<minutes>
+- /round4 submit image:<attachment> caption:<optional>
+- /round4 view
+- /round4 status
+- /round4 extend minutes:<minutes>
+- /round4 close
+This submission system accepts the screenshot directly in the slash command, avoiding DM collector problems.
 
-Examples:
-/tournament edit-points user:@Greyson category:Round 2 action:Set amount:10
-/tournament edit-points user:@Greyson category:Displayed total action:Add amount:3
-/tournament edit-points user:@Greyson category:Round 1 action:Remove amount:2
+OWNER OVERRIDE
+- /owner-trade artifact-for-tokens
+- /owner-trade transfer-artifact
+- /owner-trade tokens
+Restricted to server owner or IDs in OWNER_IDS. Every action is audited and the affected member receives a DM receipt when possible.
 
-Only Tournament Managers and server administrators can use it. The live tournament panel updates automatically.
+TRADING IMPROVEMENTS
+- /trade view
+- /trade clear-tokens
+- /trade cancel
+Existing two-user Ready + 15-second Final Confirm system remains.

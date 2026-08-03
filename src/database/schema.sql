@@ -406,3 +406,19 @@ CREATE TABLE IF NOT EXISTS token_leaderboard_messages (
   message_id TEXT NOT NULL,
   updated_at INTEGER NOT NULL
 );
+
+-- Owner-only forced trade/balance audit log
+CREATE TABLE IF NOT EXISTS owner_override_audit (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  guild_id TEXT NOT NULL,
+  actor_id TEXT NOT NULL,
+  target_id TEXT,
+  action TEXT NOT NULL,
+  artifact_id INTEGER,
+  tokens INTEGER NOT NULL DEFAULT 0,
+  reason TEXT NOT NULL,
+  before_balance INTEGER,
+  after_balance INTEGER,
+  created_at INTEGER NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_owner_override_audit_guild ON owner_override_audit(guild_id,created_at DESC);
