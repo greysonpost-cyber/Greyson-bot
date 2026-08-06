@@ -66,6 +66,7 @@ ensureColumn('automod_rules', 'ignored_channels_json', 'TEXT');
 ensureColumn('automod_rules', 'custom_json', 'TEXT');
 ensureColumn('giveaways', 'bonus_role_id', 'TEXT');
 ensureColumn('giveaways', 'bonus_entries', 'INTEGER DEFAULT 0');
+ensureColumn('giveaways', 'require_clan_tag', 'INTEGER NOT NULL DEFAULT 1');
 ensureColumn('giveaway_entries', 'roblox_username', 'TEXT');
 ensureColumn('giveaway_claims', 'status', "TEXT NOT NULL DEFAULT 'waiting'");
 ensureColumn('giveaway_claims', 'claim_deadline', 'INTEGER');

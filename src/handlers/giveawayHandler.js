@@ -106,13 +106,21 @@ function giveawayEmbed(g) {
   });
 
   const boosterRole = getConfig(g.guild_id, 'giveaway_booster_role');
-  embed.addFields({
-    name: '🏷️ Winner Requirement',
-    value: boosterRole
-      ? `Winners must display the **${REQUIRED_SERVER_TAG}** server tag. Members with <@&${boosterRole}> bypass all role, guild-rank, and tag requirements.`
-      : `Winners must display the **${REQUIRED_SERVER_TAG}** server tag when the giveaway ends.`,
-    inline: false
-  });
+  if (g.require_clan_tag) {
+    embed.addFields({
+      name: '🏷️ DRIP Clan Tag',
+      value: boosterRole
+        ? `**Required.** Winners must display the **${REQUIRED_SERVER_TAG}** server tag. Members with <@&${boosterRole}> bypass all role, guild-rank, and tag requirements.`
+        : `**Required.** Winners must display the **${REQUIRED_SERVER_TAG}** server tag when the giveaway ends.`,
+      inline: false
+    });
+  } else {
+    embed.addFields({
+      name: '🏷️ DRIP Clan Tag',
+      value: '**Not required** for this giveaway.',
+      inline: false
+    });
+  }
 
   return embed.setColor(g.ended ? 0x64748B : g.locked ? 0xF5B942 : 0xE62429).setAuthor({ name: '🕷️ DRIPCORE GIVEAWAYS • SPIDER-VERSE' }).setFooter({ text: `Giveaway #${g.id} • Power Tokens can bend the odds` });
 }
@@ -159,7 +167,8 @@ async function pickWinners(g, client) {
   const eligible = [];
   for (const entry of entries) {
     const member = await client.guilds.cache.get(g.guild_id)?.members.fetch(entry.user_id).catch(() => null);
-    if ((member && isBooster(member)) || await userHasRequiredServerTag(client, entry.user_id)) eligible.push(entry);
+    const bypass = member && isBooster(member);
+    if (!g.require_clan_tag || bypass || await userHasRequiredServerTag(client, entry.user_id)) eligible.push(entry);
   }
 
   const pool = [];
@@ -420,7 +429,7 @@ async function endGiveaway(client, id, { reroll = false } = {}) {
   const winners = await pickWinners(g, client);
   updateEnded.run(JSON.stringify(winners), id);
   if (!reroll) await applyFriendlyNeighborhoodRefunds(g, winners, client);
-  const text = winners.length ? winners.map(userId => `<@${userId}>`).join(', ') : `No eligible entries with the **${REQUIRED_SERVER_TAG}** server tag.`;
+  const text = winners.length ? winners.map(userId => `<@${userId}>`).join(', ') : (g.require_clan_tag ? `No eligible entries with the **${REQUIRED_SERVER_TAG}** server tag.` : 'No eligible entries.');
   if (channel) {
     await channel.send({ embeds: [successEmbed(reroll ? 'Giveaway Rerolled!' : 'Giveaway Ended!', `**${g.prize}**\n**Winner(s):** ${text}\nAn automatic private winner ticket is being created now.`)] });
     if (g.message_id) {

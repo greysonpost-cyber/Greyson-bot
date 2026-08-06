@@ -1,25 +1,40 @@
-DRIPCORE PRISMATIC PUNISHER + INVENTORY PATCH
+DRIPCORE GIVEAWAY HOST + DRIP TAG + EDIT PATCH
 
-1. Upload the included src folder into the ROOT of your GitHub repository.
-2. Replace the matching files.
-3. Restart/redeploy Railway.
-4. Run: npm run deploy
+1. Upload the included src folder into the root of your GitHub repository.
+2. Replace the matching files when prompted.
+3. Keep your existing Railway database volume/data.
+4. Redeploy or restart the bot.
+5. Run: npm run deploy
 
-CREATE THE ONE-OF-ONE:
-/artifact create-punisher role:@The Punisher price:100
+NEW GIVEAWAY START OPTIONS
+/giveaway start
+- prize: required
+- duration: required (examples: 30m, 2h, 1d)
+- channel: optional
+- winners: optional
+- host: optional; defaults to the person running the command
+- require_drip_tag: optional Yes/No; defaults to No
+- required_role: optional
+- required_guild_role: optional
 
-The command creates exactly one numbered copy and replies with both its Type ID and Artifact ID.
+The clan tag is always DRIP. Managers are never asked to type a custom tag.
 
-SPIDER-VERSE ROLE RULE:
-A user qualifies by owning either:
-- Spider-Man + Web Slinger/Web Swing + Friendly Neighborhood, OR
-- The Punisher alone.
+NEW EDIT COMMAND
+/giveaway edit
+- Paste the active giveaway message link.
+- Change any included option; leave other options blank to keep them unchanged.
+- Supported edits: prize, host, remaining duration, winner count, channel,
+  DRIP tag requirement, required Discord role, required guild rank, and lock status.
+- Use clear_required_role or clear_required_guild_role to remove requirements.
+- Existing entrants and their entry counts are preserved.
 
-The Punisher is NOT a fourth requirement.
+WHO CAN EDIT
+- The selected giveaway host
+- Configured Giveaway Manager role
+- Configured Giveaway Staff role
+- Administrators / Manage Server
 
-After creating or transferring it, run this once if needed:
-/collection reward sync collection:Spider-Verse
-
-INVENTORY:
-/artifact collection
-Now shows the unique Artifact ID, rarity, collection, passive, and trade/listing status for every owned copy.
+DATABASE
+The require_clan_tag column is installed automatically on startup.
+Existing giveaways remain DRIP-tag-required for compatibility. New giveaways use
+the selected require_drip_tag option and default to No when omitted.

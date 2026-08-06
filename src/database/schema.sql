@@ -96,6 +96,7 @@ CREATE TABLE IF NOT EXISTS giveaways (
     winner_count INTEGER NOT NULL DEFAULT 1,
     required_role_id TEXT,
     required_guild_rank TEXT,
+    require_clan_tag INTEGER NOT NULL DEFAULT 1,
     ends_at INTEGER NOT NULL,
     ended INTEGER NOT NULL DEFAULT 0,
     locked INTEGER NOT NULL DEFAULT 0,
